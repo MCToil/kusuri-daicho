@@ -326,10 +326,18 @@
   }
   #toast.on { opacity: .95; }
 
+  .tagpick { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 3px; }
+  .tagpick .chip { cursor: pointer; }
+  .tagpick .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .tagpick .none { font-size: 12px; color: var(--ink-dim); padding-top: 3px; }
+  .tags-cell { display: flex; gap: 4px; flex-wrap: wrap; }
+
   .hidden { display: none !important; }
   .foot { text-align: center; font-size: 11.5px; color: var(--ink-dim); margin-top: 24px; letter-spacing: .06em; }
   .split { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .grow { flex: 1 1 auto; }
+  /* .f input の width:100% が効くと横のボタンが折り返してしまう */
+  .split > input.grow { width: auto; min-width: 0; }
 </style>
 </head>
 <body>
@@ -408,14 +416,30 @@
         </div>
         <div>
           <label>入手先</label>
-          <input type="text" id="fPlace" list="dlPlace" placeholder="みどり内科／◯◯薬局" autocomplete="off">
-          <datalist id="dlPlace"></datalist>
+          <select id="fPlace"></select>
+        </div>
+        <div style="grid-column:1/-1" id="wrapTags">
+          <label>タグ</label>
+          <div class="tagpick" id="fTags"></div>
+          <div class="split hidden" id="newTagBox" style="margin-top:8px">
+            <input type="text" id="tName" class="grow" placeholder="保険／自費／ジェネリック" autocomplete="off">
+            <button type="button" class="btn mini" id="btnTagNew">追加</button>
+            <button type="button" class="btn mini" id="btnTagCancel">やめる</button>
+          </div>
         </div>
         <div style="grid-column:1/-1">
           <label>メモ</label>
           <textarea id="fMemo" placeholder="次回は3か月分／ジェネリックに変更 など"></textarea>
         </div>
       </div>
+
+      <fieldset class="sub hidden" id="newPlaceBox">
+        <legend>新しい入手先</legend>
+        <div class="split">
+          <input type="text" id="pName" class="grow" placeholder="みどり内科" autocomplete="off">
+        </div>
+        <div class="hint">保存すると入手先として登録され、次からはプルダウンで選べます。</div>
+      </fieldset>
 
       <fieldset class="sub hidden" id="newMedBox">
         <legend>新しい薬</legend>
@@ -475,8 +499,7 @@
         </div>
         <div>
           <label>いつもの入手先</label>
-          <input type="text" id="mPlace" list="dlPlace2" placeholder="みどり内科" autocomplete="off">
-          <datalist id="dlPlace2"></datalist>
+          <select id="mPlace"></select>
         </div>
         <div>
           <label>補充アラート（空欄なら既定）</label>
@@ -494,6 +517,14 @@
           <textarea id="mMemo" placeholder="朝食後1錠／飲み合わせ注意 など"></textarea>
         </div>
       </div>
+      <fieldset class="sub hidden" id="newPlaceBox2">
+        <legend>新しい入手先</legend>
+        <div class="split">
+          <input type="text" id="pName2" class="grow" placeholder="みどり内科" autocomplete="off">
+        </div>
+        <div class="hint">保存すると入手先として登録され、次からはプルダウンで選べます。</div>
+      </fieldset>
+
       <div class="actions">
         <button class="btn primary" id="btnMedSave">保存</button>
         <button class="btn" id="btnMedClear">入力をクリア</button>
@@ -519,6 +550,7 @@
         </div>
         <div class="grow"></div>
         <select id="hMed" style="background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);padding:6px 9px"></select>
+        <select id="hTag" style="background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);padding:6px 9px"></select>
       </div>
       <div class="scroll-x"><table class="t" id="histTable"></table></div>
     </div>
@@ -545,6 +577,8 @@
     <div class="card"><div class="card-title">月別</div><div id="byMonth"></div></div>
     <div class="card"><div class="card-title">薬別</div><div id="byMed"></div></div>
     <div class="card"><div class="card-title">入手先別</div><div id="byPlace"></div></div>
+    <div class="card" id="tagCard"><div class="card-title">タグ別</div><div id="byTag"></div>
+      <div class="hint">1件に複数のタグが付いていると、その額はどのタグにも数えます。合計が年間の薬代を超えることがあります。</div></div>
     <div class="card"><div class="card-title">年ごとの推移</div><div id="byYear"></div></div>
   </section>
 
@@ -598,6 +632,27 @@
         </div>
       </div>
       <div class="msg" id="syncMsg"></div>
+    </div>
+
+    <div class="card f">
+      <div class="card-title">入手先</div>
+      <div class="split">
+        <input type="text" id="pAdd" class="grow" placeholder="みどり内科" autocomplete="off">
+        <button class="btn" id="btnPlaceAdd">追加</button>
+      </div>
+      <div class="scroll-x" style="margin-top:12px"><table class="t" id="placeTable"></table></div>
+      <div class="msg" id="placeMsg"></div>
+    </div>
+
+    <div class="card f">
+      <div class="card-title">タグ</div>
+      <div class="split">
+        <input type="text" id="tAdd" class="grow" placeholder="保険／自費／ジェネリック" autocomplete="off">
+        <button class="btn" id="btnTagAdd">追加</button>
+      </div>
+      <div class="scroll-x" style="margin-top:12px"><table class="t" id="tagTable"></table></div>
+      <div class="hint">仕入れ1件ごとに、いくつでも付けられます。名前を直すと、その名前を使っている記録もまとめて変わります。</div>
+      <div class="msg" id="tagMsg"></div>
     </div>
 
     <div class="card f">
@@ -680,6 +735,8 @@ function blank() {
     updatedAt: '',
     meds: [],
     buys: [],
+    places: [],
+    tags: [],
     settings: { theme: 'auto', warnDays: 14 }
   };
 }
@@ -696,8 +753,11 @@ function load() {
       updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : '',
       meds: Array.isArray(o.meds) ? o.meds.map(normMed) : [],
       buys: Array.isArray(o.buys) ? o.buys.map(normBuy) : [],
+      places: names(o.places),
+      tags: names(o.tags),
       settings: Object.assign(b.settings, o.settings || {})
     };
+    ensureMasters(d);
     // 同期を入れる前に作られたデータは updatedAt を持たない。空のままだと
     // 「この端末には変更が無い」と判定され、クラウドで黙って上書きされる。
     if (!d.updatedAt && (d.meds.length || d.buys.length)) d.updatedAt = new Date().toISOString();
@@ -733,8 +793,27 @@ function normBuy(b) {
     days: b.days === '' || b.days == null ? null : Math.max(0, numf(b.days)),
     amount: Math.round(numf(b.amount)),
     place: String(b.place || '').trim(),
+    tags: names(b.tags),
     memo: String(b.memo || '')
   };
+}
+
+// 名前の一覧（入手先・タグ）は、空を落として重複を消した文字列の配列にそろえる
+function names(a) {
+  if (!Array.isArray(a)) return [];
+  const out = [];
+  a.forEach(v => { const t = String(v ?? '').trim(); if (t && !out.includes(t)) out.push(t); });
+  return out;
+}
+
+// 記録の中で使われている入手先・タグは、一覧に無ければ足しておく。
+// 古いデータの取り込みや、別の端末で登録された名前を拾うため。
+function ensureMasters(d) {
+  d.buys.forEach(b => {
+    if (b.place && !d.places.includes(b.place)) d.places.push(b.place);
+    b.tags.forEach(t => { if (!d.tags.includes(t)) d.tags.push(t); });
+  });
+  d.meds.forEach(m => { if (m.place && !d.places.includes(m.place)) d.places.push(m.place); });
 }
 
 /* ============================================================
@@ -989,6 +1068,41 @@ function renderPlan() {
    ============================================================ */
 
 const NEW_MED = '__new__';
+const NEW_PLACE = '__newplace__';
+
+// 入手先のプルダウン。一覧に無い名前（古い記録など）も選択肢として残す。
+function fillPlaceSelect(sel, current, withNew) {
+  const cur = current || '';
+  const list = S.places.slice();
+  if (cur && !list.includes(cur)) list.push(cur);
+  sel.innerHTML = `<option value="">（未設定）</option>`
+    + list.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('')
+    + (withNew ? `<option value="${NEW_PLACE}">＋ 新しい入手先</option>` : '');
+  sel.value = cur;
+}
+
+let ENTRY_TAGS = [];
+
+function renderTagPick() {
+  const el = $('fTags');
+  if (!S.tags.length) {
+    el.innerHTML = `<span class="none">タグはまだありません。</span>`
+      + `<button type="button" class="chip" data-newtag="1">＋ 新しいタグ</button>`;
+  } else {
+    el.innerHTML = S.tags.map(t =>
+      `<button type="button" class="chip ${ENTRY_TAGS.includes(t) ? 'on' : ''}" data-tag="${esc(t)}">${esc(t)}</button>`).join('')
+      + `<button type="button" class="chip" data-newtag="1">＋ 新しいタグ</button>`;
+  }
+  el.querySelectorAll('[data-tag]').forEach(b => b.onclick = () => {
+    const t = b.dataset.tag;
+    ENTRY_TAGS = ENTRY_TAGS.includes(t) ? ENTRY_TAGS.filter(x => x !== t) : ENTRY_TAGS.concat(t);
+    renderTagPick();
+  });
+  el.querySelector('[data-newtag]').onclick = () => {
+    $('newTagBox').classList.remove('hidden');
+    $('tName').focus();
+  };
+}
 
 function fillMedSelect(sel, opts) {
   const o = opts || {};
@@ -1009,9 +1123,24 @@ function initEntry() {
     $('newMedBox').classList.toggle('hidden', !isNew);
     if (isNew && !$('nUnit').value) $('nUnit').value = FORM_UNIT[$('nForm').value];
     const m = medById($('fMed').value);
-    if (m && !$('fPlace').value) $('fPlace').value = m.place;
+    if (m && !$('fPlace').value) fillPlaceSelect($('fPlace'), m.place, true);
     updateCalcHint();
   };
+  $('fPlace').onchange = () => {
+    $('newPlaceBox').classList.toggle('hidden', $('fPlace').value !== NEW_PLACE);
+    if ($('fPlace').value === NEW_PLACE) $('pName').focus();
+  };
+
+  $('btnTagNew').onclick = () => {
+    const t = $('tName').value.trim();
+    if (!t) { $('tName').focus(); return; }
+    if (!S.tags.includes(t)) { S.tags.push(t); save(); renderTagTable(); }
+    if (!ENTRY_TAGS.includes(t)) ENTRY_TAGS.push(t);
+    $('tName').value = '';
+    $('newTagBox').classList.add('hidden');
+    renderTagPick();
+  };
+  $('btnTagCancel').onclick = () => { $('tName').value = ''; $('newTagBox').classList.add('hidden'); };
   $('fKind').onchange = () => {
     const adj = $('fKind').value === 'adjust';
     $('lbQty').innerHTML = adj ? 'いまの残量<span class="req">＊</span>' : '数量<span class="req">＊</span>';
@@ -1049,7 +1178,8 @@ function openEntry(buyId, medId) {
     $('fQty').value = b.qty || '';
     $('fDays').value = b.days == null ? '' : b.days;
     $('fAmount').value = b.amount || '';
-    $('fPlace').value = b.place;
+    fillPlaceSelect($('fPlace'), b.place, true);
+    ENTRY_TAGS = b.tags.slice();
     $('fMemo').value = b.memo;
     $('btnDelete').classList.remove('hidden');
   } else {
@@ -1060,11 +1190,15 @@ function openEntry(buyId, medId) {
     $('fKind').value = 'rx';
     ['fQty', 'fDays', 'fAmount', 'fMemo'].forEach(id => $(id).value = '');
     const m = medById($('fMed').value);
-    $('fPlace').value = m ? m.place : '';
+    fillPlaceSelect($('fPlace'), m ? m.place : '', true);
+    ENTRY_TAGS = [];
     $('btnDelete').classList.add('hidden');
   }
-  ['nName', 'nPerDay'].forEach(id => $(id).value = '');
+  ['nName', 'nPerDay', 'pName', 'tName'].forEach(id => $(id).value = '');
+  $('newTagBox').classList.add('hidden');
+  renderTagPick();
   $('fMed').onchange();
+  $('fPlace').onchange();
   $('fKind').onchange();
   msg($('entryMsg'), '', 'info');
   showTab('entry');
@@ -1100,6 +1234,14 @@ function saveBuy() {
   const el = $('entryMsg');
   let medId = $('fMed').value;
 
+  // 入手先：新規なら先に登録する
+  let place = $('fPlace').value;
+  if (place === NEW_PLACE) {
+    place = $('pName').value.trim();
+    if (!place) { $('pName').focus(); return msg(el, '新しい入手先の名前を入れてください。', 'err'); }
+    if (!S.places.includes(place)) S.places.push(place);
+  }
+
   if (medId === NEW_MED) {
     const name = $('nName').value.trim();
     if (!name) return msg(el, '新しい薬の名前を入れてください。', 'err');
@@ -1108,7 +1250,7 @@ function saveBuy() {
     const m = normMed({
       name, form,
       unit: $('nUnit').value || FORM_UNIT[form], perDay: $('nPerDay').value,
-      place: $('fPlace').value, active: true
+      place, active: true
     });
     S.meds.push(m);
     medId = m.id;
@@ -1125,7 +1267,8 @@ function saveBuy() {
     qty: $('fQty').value,
     days: $('fKind').value === 'adjust' ? null : $('fDays').value,
     amount: $('fAmount').value,
-    place: $('fPlace').value,
+    place,
+    tags: ENTRY_TAGS,
     memo: $('fMemo').value
   });
 
@@ -1151,6 +1294,10 @@ function saveBuy() {
 function initMeds() {
   $('mForm').innerHTML = FORM_NAMES.map(f => `<option>${f}</option>`).join('');
   $('mForm').onchange = () => { if (!EDIT_MED || !$('mUnit').value) $('mUnit').value = FORM_UNIT[$('mForm').value]; };
+  $('mPlace').onchange = () => {
+    $('newPlaceBox2').classList.toggle('hidden', $('mPlace').value !== NEW_PLACE);
+    if ($('mPlace').value === NEW_PLACE) $('pName2').focus();
+  };
   $('btnMedSave').onclick = saveMed;
   $('btnMedClear').onclick = () => openMed(null);
   $('btnMedDelete').onclick = () => {
@@ -1176,19 +1323,22 @@ function openMed(id) {
     $('mForm').value = m.form;
     $('mPerDay').value = m.perDay;
     $('mUnit').value = m.unit;
-    $('mPlace').value = m.place;
+    fillPlaceSelect($('mPlace'), m.place, true);
     $('mWarn').value = m.warnDays == null ? '' : m.warnDays;
     $('mActive').value = m.active ? '1' : '0';
     $('mMemo').value = m.memo;
     $('btnMedDelete').classList.remove('hidden');
   } else {
     $('medTitle').textContent = '薬を登録する';
-    ['mName', 'mPerDay', 'mPlace', 'mWarn', 'mMemo'].forEach(k => $(k).value = '');
+    ['mName', 'mPerDay', 'mWarn', 'mMemo'].forEach(k => $(k).value = '');
+    fillPlaceSelect($('mPlace'), '', true);
     $('mForm').value = '錠剤';
     $('mUnit').value = '錠';
     $('mActive').value = '1';
     $('btnMedDelete').classList.add('hidden');
   }
+  $('pName2').value = '';
+  $('mPlace').onchange();
   msg($('medMsg'), '', 'info');
   renderMedTable();
   showTab('meds');
@@ -1200,11 +1350,18 @@ function saveMed() {
   if (!$('mName').value.trim()) return msg(el, '薬の名前を入れてください。', 'err');
   if ($('mPerDay').value === '') return msg(el, '1日の消費量を入れてください（頓服なら 0）。', 'err');
 
+  let place = $('mPlace').value;
+  if (place === NEW_PLACE) {
+    place = $('pName2').value.trim();
+    if (!place) { $('pName2').focus(); return msg(el, '新しい入手先の名前を入れてください。', 'err'); }
+    if (!S.places.includes(place)) S.places.push(place);
+  }
+
   const m = normMed({
     id: EDIT_MED || undefined,
     name: $('mName').value,
     form: $('mForm').value, unit: $('mUnit').value, perDay: $('mPerDay').value,
-    place: $('mPlace').value, warnDays: $('mWarn').value === '' ? null : $('mWarn').value,
+    place, warnDays: $('mWarn').value === '' ? null : $('mWarn').value,
     active: $('mActive').value === '1', memo: $('mMemo').value
   });
   if (EDIT_MED) S.meds = S.meds.map(x => x.id === EDIT_MED ? m : x);
@@ -1253,6 +1410,7 @@ function initHist() {
   $('hPrev').onclick = () => { H_YEAR = (H_YEAR || new Date().getFullYear()) - 1; renderHist(); };
   $('hNext').onclick = () => { H_YEAR = (H_YEAR || new Date().getFullYear()) + 1; renderHist(); };
   $('hMed').onchange = renderHist;
+  $('hTag').onchange = renderHist;
 }
 
 function renderHist() {
@@ -1260,11 +1418,18 @@ function renderHist() {
   fillMedSelect($('hMed'), { head: `<option value="">すべての薬</option>` });
   $('hMed').value = keepMed && (keepMed === '' || medById(keepMed)) ? keepMed : '';
 
+  const keepTag = $('hTag').value;
+  $('hTag').innerHTML = `<option value="">すべてのタグ</option>`
+    + S.tags.map(t => `<option>${esc(t)}</option>`).join('');
+  $('hTag').value = S.tags.includes(keepTag) ? keepTag : '';
+  $('hTag').classList.toggle('hidden', !S.tags.length);
+
   $('hYear').textContent = H_YEAR ? H_YEAR : '全期間';
 
   let rows = S.buys.filter(b => b.date);
   if (H_YEAR) rows = rows.filter(b => b.date.startsWith(String(H_YEAR)));
   if ($('hMed').value) rows = rows.filter(b => b.medId === $('hMed').value);
+  if ($('hTag').value) rows = rows.filter(b => b.tags.includes($('hTag').value));
   rows.sort((a, b) => b.date.localeCompare(a.date));
 
   if (!rows.length) {
@@ -1276,7 +1441,7 @@ function renderHist() {
   $('histTable').innerHTML = `
     <thead><tr>
       <th>日付</th><th>薬</th><th>種別</th>
-      <th class="n">数量</th><th class="n">日数</th><th class="n">金額</th><th>入手先</th><th>メモ</th><th></th>
+      <th class="n">数量</th><th class="n">日数</th><th class="n">金額</th><th>入手先</th><th>タグ</th><th>メモ</th><th></th>
     </tr></thead>
     <tbody>${rows.map(b => {
       const m = medById(b.medId) || { name: '（削除済み）', unit: '', perDay: 0 };
@@ -1289,11 +1454,12 @@ function renderHist() {
         <td class="n">${d}</td>
         <td class="n">${b.amount ? yen(b.amount) : '—'}</td>
         <td class="wrap-c">${esc(b.place || '—')}</td>
+        <td class="wrap-c">${b.tags.length ? `<span class="tags-cell">${b.tags.map(t => `<span class="chip tag">${esc(t)}</span>`).join('')}</span>` : '—'}</td>
         <td class="wrap-c">${esc(b.memo || '')}</td>
         <td><button class="chip" data-eb="${b.id}">編集</button></td>
       </tr>`;
     }).join('')}
-    <tr class="total"><td colspan="5">${rows.length} 件</td><td class="n">${yen(sum)}</td><td colspan="3"></td></tr>
+    <tr class="total"><td colspan="5">${rows.length} 件</td><td class="n">${yen(sum)}</td><td colspan="4"></td></tr>
     </tbody>`;
 
   $('histTable').querySelectorAll('[data-eb]').forEach(b => b.onclick = () => openEntry(b.dataset.eb));
@@ -1354,6 +1520,14 @@ function renderStats() {
   $('byMed').innerHTML = bars(sumBy(b => (medById(b.medId) || {}).name || '（削除済み）'));
   $('byPlace').innerHTML = bars(sumBy(b => b.place || '（入手先なし）'));
 
+  const gt = {};
+  year.forEach(b => b.tags.forEach(t => { gt[t] = (gt[t] || 0) + b.amount; }));
+  const untagged = year.filter(b => !b.tags.length).reduce((a, b) => a + b.amount, 0);
+  const tagRows = Object.entries(gt).sort((a, b) => b[1] - a[1]);
+  if (untagged) tagRows.push(['（タグなし）', untagged]);
+  $('tagCard').classList.toggle('hidden', !S.tags.length);
+  $('byTag').innerHTML = bars(tagRows);
+
   const gy = {};
   all.forEach(b => { const y = b.date.slice(0, 4); gy[y] = (gy[y] || 0) + b.amount; });
   $('byYear').innerHTML = bars(Object.entries(gy).sort((a, b) => a[0].localeCompare(b[0])).map(([y, v]) => [y + '年', v]));
@@ -1362,6 +1536,110 @@ function renderStats() {
 /* ============================================================
    設定タブ
    ============================================================ */
+
+/* ---- 入手先とタグの管理 ---- */
+
+const placeUse = v => S.buys.filter(b => b.place === v).length + S.meds.filter(m => m.place === v).length;
+const tagUse = v => S.buys.filter(b => b.tags.includes(v)).length;
+
+function renamePlace(from, to) {
+  S.buys.forEach(b => { if (b.place === from) b.place = to; });
+  S.meds.forEach(m => { if (m.place === from) m.place = to; });
+}
+function renameTag(from, to) {
+  S.buys.forEach(b => { b.tags = names(b.tags.map(t => (t === from ? to : t))); });
+}
+
+// 入手先とタグは同じ形の表なので、1つの描画関数で受ける
+function renderNameTable(kind) {
+  const isPlace = kind === 'place';
+  const list = isPlace ? S.places : S.tags;
+  const table = $(isPlace ? 'placeTable' : 'tagTable');
+  const use = isPlace ? placeUse : tagUse;
+  const unit = isPlace ? '件で使用' : '件に付与';
+
+  if (!list.length) {
+    table.innerHTML = `<tr><td><div class="empty">まだ登録がありません。</div></td></tr>`;
+    return;
+  }
+  table.innerHTML = `
+    <thead><tr><th>名前</th><th class="n">使用</th><th></th></tr></thead>
+    <tbody>${list.map((v, i) => `<tr>
+      <td><input type="text" data-name="${i}" value="${esc(v)}" style="width:100%;background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);padding:6px 9px"></td>
+      <td class="n">${use(v)}${unit}</td>
+      <td><button class="chip" data-save="${i}">名前を保存</button> <button class="chip" data-del="${i}">削除</button></td>
+    </tr>`).join('')}</tbody>`;
+
+  table.querySelectorAll('[data-save]').forEach(b => b.onclick = () => {
+    const i = +b.dataset.save;
+    const from = list[i];
+    const to = table.querySelector(`[data-name="${i}"]`).value.trim();
+    const el = $(isPlace ? 'placeMsg' : 'tagMsg');
+    if (!to) return msg(el, '名前を入れてください。', 'err');
+    if (to === from) return msg(el, '変わっていません。', 'info');
+    if (list.includes(to)) return msg(el, `「${esc(to)}」はすでにあります。`, 'err');
+    const n = use(from);
+    list[i] = to;
+    if (isPlace) renamePlace(from, to); else renameTag(from, to);
+    save(); redrawNames(); renderAll();
+    msg(el, `「${esc(from)}」を「${esc(to)}」に変えました。${n ? `${n}件の記録にも反映しています。` : ''}`, 'ok');
+  });
+
+  table.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
+    const i = +b.dataset.del;
+    const v = list[i];
+    const n = use(v);
+    const what = isPlace ? '入手先' : 'タグ';
+    if (n && !confirm(`「${v}」は ${n}件で使われています。削除すると、その記録の${what}は空になります。よろしいですか？`)) return;
+    if (!n && !confirm(`「${v}」を削除します。よろしいですか？`)) return;
+    list.splice(i, 1);
+    if (isPlace) renamePlace(v, ''); else renameTag(v, '');
+    save(); redrawNames(); renderAll();
+    msg($(isPlace ? 'placeMsg' : 'tagMsg'), `「${esc(v)}」を削除しました。`, 'ok');
+  });
+}
+
+const renderPlaceTable = () => renderNameTable('place');
+const renderTagTable = () => renderNameTable('tag');
+
+// 名前が変わると、フォームのプルダウンとタグ選択も作り直す必要がある
+function redrawNames() {
+  renderPlaceTable();
+  renderTagTable();
+  ENTRY_TAGS = ENTRY_TAGS.filter(t => S.tags.includes(t));
+  renderTagPick();
+  // 消えた・名前が変わった入手先が選ばれたままにならないよう、未登録なら空に戻す
+  const keep = sel => (S.places.includes(sel.value) ? sel.value : '');
+  fillPlaceSelect($('fPlace'), keep($('fPlace')), true);
+  fillPlaceSelect($('mPlace'), keep($('mPlace')), true);
+  $('newPlaceBox').classList.add('hidden');
+  $('newPlaceBox2').classList.add('hidden');
+}
+
+function initNameTables() {
+  $('btnPlaceAdd').onclick = () => {
+    const v = $('pAdd').value.trim();
+    if (!v) return msg($('placeMsg'), '名前を入れてください。', 'err');
+    if (S.places.includes(v)) return msg($('placeMsg'), `「${esc(v)}」はすでにあります。`, 'err');
+    S.places.push(v); $('pAdd').value = '';
+    save(); redrawNames();
+    msg($('placeMsg'), `「${esc(v)}」を追加しました。`, 'ok');
+  };
+  $('pAdd').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('btnPlaceAdd').click(); } };
+
+  $('btnTagAdd').onclick = () => {
+    const v = $('tAdd').value.trim();
+    if (!v) return msg($('tagMsg'), '名前を入れてください。', 'err');
+    if (S.tags.includes(v)) return msg($('tagMsg'), `「${esc(v)}」はすでにあります。`, 'err');
+    S.tags.push(v); $('tAdd').value = '';
+    save(); redrawNames();
+    msg($('tagMsg'), `「${esc(v)}」を追加しました。`, 'ok');
+  };
+  $('tAdd').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('btnTagAdd').click(); } };
+
+  renderPlaceTable();
+  renderTagTable();
+}
 
 function initSettings() {
   $('sWarn').value = S.settings.warnDays;
@@ -1376,12 +1654,12 @@ function initSettings() {
     msg($('dataMsg'), '書き出しました。', 'ok');
   };
   $('btnExportCsv').onclick = () => {
-    const head = ['仕入れ日', '薬', '種別', '数量', '単位', '日数分', '金額', '入手先', 'メモ'];
+    const head = ['仕入れ日', '薬', '種別', '数量', '単位', '日数分', '金額', '入手先', 'タグ', 'メモ'];
     const rows = S.buys.slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')).map(b => {
       const m = medById(b.medId) || { name: '（削除済み）', unit: '', perDay: 0 };
       const d = b.kind === 'adjust' ? '' : supplyDays(m, b);
       return [b.date, m.name, KIND_LABEL[b.kind], b.qty, m.unit,
-              d ? Math.round(d * 10) / 10 : '', b.amount, b.place, b.memo];
+              d ? Math.round(d * 10) / 10 : '', b.amount, b.place, b.tags.join('・'), b.memo];
     });
     const csv = [head, ...rows].map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
     download(`kusuri-daicho-${TODAY}.csv`, '\ufeff' + csv, 'text/csv');
@@ -1400,10 +1678,14 @@ function initSettings() {
                    + `ファイルの内容（薬 ${o.meds.length} 件・記録 ${o.buys.length} 件）で置き換えます。よろしいですか？`)) return;
         S = {
           version: 1,
+          updatedAt: '',
           meds: o.meds.map(normMed),
           buys: o.buys.map(normBuy),
+          places: names(o.places),
+          tags: names(o.tags),
           settings: Object.assign(blank().settings, o.settings || {})
         };
+        ensureMasters(S);
         save(); redrawAll(); showTab('settings');
         msg($('dataMsg'), `薬 ${S.meds.length} 件・記録 ${S.buys.length} 件を復元しました。`, 'ok');
       } catch (err) {
@@ -1517,6 +1799,8 @@ function payload() {
     updatedAt: S.updatedAt,
     meds: S.meds,
     buys: S.buys,
+    places: S.places,
+    tags: S.tags,
     settings: { warnDays: S.settings.warnDays }   // テーマは端末ごとなので送らない
   }, null, 2);
 }
@@ -1524,16 +1808,20 @@ function payload() {
 function parseRemote(text) {
   const d = JSON.parse(text);
   if (!d || !Array.isArray(d.meds) || !Array.isArray(d.buys)) throw new Error('クラウド側のデータを読めませんでした。');
-  return {
+  const r = {
     version: 1,
     updatedAt: typeof d.updatedAt === 'string' ? d.updatedAt : '',
     meds: d.meds.map(normMed),
     buys: d.buys.map(normBuy),
+    places: names(d.places),
+    tags: names(d.tags),
     settings: {
       theme: S.settings.theme,                    // 手元の見た目は保つ
       warnDays: Math.max(0, Math.round(numf((d.settings || {}).warnDays ?? S.settings.warnDays)))
     }
   };
+  ensureMasters(r);
+  return r;
 }
 
 function fetchRemote() {
@@ -1595,6 +1883,8 @@ function redrawAll() {
   openEntry();
   renderAll();
   renderStats();
+  renderPlaceTable();
+  renderTagTable();
   refreshRestore();
   showTab(t);
 }
@@ -1778,8 +2068,11 @@ function initSync() {
       version: 1, updatedAt: '',
       meds: (b.data.meds || []).map(normMed),
       buys: (b.data.buys || []).map(normBuy),
+      places: names(b.data.places),
+      tags: names(b.data.tags),
       settings: Object.assign(blank().settings, b.data.settings || {}, { theme: S.settings.theme })
     };
+    ensureMasters(S);
     localStorage.removeItem(BACKUP_KEY);
     save();            // 更新時刻が進むので、次の同期でこの内容が反映される
     redrawAll();
@@ -1815,10 +2108,8 @@ function initSync() {
    ============================================================ */
 
 function refreshDatalists() {
-  const places = [...new Set([...S.buys.map(b => b.place), ...S.meds.map(m => m.place)].filter(Boolean))].sort();
   const units = [...new Set([...UNITS, ...S.meds.map(m => m.unit).filter(Boolean)])];
   const opt = a => a.map(v => `<option value="${esc(v)}">`).join('');
-  ['dlPlace', 'dlPlace2'].forEach(id => $(id).innerHTML = opt(places));
   ['dlUnit', 'dlUnit2'].forEach(id => $(id).innerHTML = opt(units));
 }
 
@@ -1873,6 +2164,7 @@ $('todayTag').textContent = TODAY;
 applyTheme();
 initEntry();
 initMeds();
+initNameTables();
 initHist();
 initStats();
 initSettings();
