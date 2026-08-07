@@ -187,7 +187,6 @@
   .d.ended { opacity: .55; }
   .d-main { min-width: 0; }
   .d-name { font-size: 15px; font-weight: 700; letter-spacing: .02em; overflow-wrap: anywhere; }
-  .d-name .who { font-size: 11.5px; color: var(--ink-dim); font-weight: 500; margin-right: 6px; letter-spacing: .04em; }
   .d-sub { font-size: 12.5px; color: var(--ink-dim); margin-top: 1px; overflow-wrap: anywhere; }
   .d-meta { font-size: 11.5px; color: var(--ink-dim); margin-top: 3px; display: flex; gap: 10px; flex-wrap: wrap; }
   .d-rest { text-align: right; white-space: nowrap; }
@@ -423,11 +422,6 @@
             <input type="text" id="nName" placeholder="アムロジピン 5mg" autocomplete="off">
           </div>
           <div>
-            <label>服用者</label>
-            <input type="text" id="nPerson" list="dlPerson" placeholder="本人／母" autocomplete="off">
-            <datalist id="dlPerson"></datalist>
-          </div>
-          <div>
             <label>分類</label>
             <select id="nCat"></select>
           </div>
@@ -466,11 +460,6 @@
         <div style="grid-column:1/-1">
           <label>薬の名前<span class="req">＊</span></label>
           <input type="text" id="mName" placeholder="アムロジピン 5mg" autocomplete="off">
-        </div>
-        <div>
-          <label>服用者</label>
-          <input type="text" id="mPerson" list="dlPerson2" placeholder="本人" autocomplete="off">
-          <datalist id="dlPerson2"></datalist>
         </div>
         <div>
           <label>分類</label>
@@ -535,7 +524,6 @@
         </div>
         <div class="grow"></div>
         <select id="hMed" style="background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);padding:6px 9px"></select>
-        <select id="hPerson" style="background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);padding:6px 9px"></select>
       </div>
       <div class="scroll-x"><table class="t" id="histTable"></table></div>
     </div>
@@ -551,7 +539,6 @@
           <button class="btn mini" id="sNext">▶</button>
         </div>
         <div class="grow"></div>
-        <select id="sPerson" style="background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);padding:6px 9px"></select>
       </div>
       <div class="result">
         <div class="k">年間の薬代</div>
@@ -563,7 +550,6 @@
     <div class="card"><div class="card-title">月別</div><div id="byMonth"></div></div>
     <div class="card"><div class="card-title">薬別</div><div id="byMed"></div></div>
     <div class="card"><div class="card-title">入手先別</div><div id="byPlace"></div></div>
-    <div class="card"><div class="card-title">服用者別</div><div id="byPerson"></div></div>
     <div class="card"><div class="card-title">分類別</div><div id="byCat"></div></div>
     <div class="card"><div class="card-title">年ごとの推移</div><div id="byYear"></div></div>
   </section>
@@ -755,7 +741,6 @@ function normMed(m) {
   return {
     id: m.id || uid(),
     name: String(m.name || '').trim(),
-    person: String(m.person || '').trim(),
     category: CAT_NAMES.includes(m.category) ? m.category : 'その他',
     form,
     unit: String(m.unit || '').trim() || FORM_UNIT[form],
@@ -816,7 +801,6 @@ const buysOf = id => S.buys.filter(b => b.medId === id && b.date)
 
 let TODAY = todayStr();
 let FILTER = 'all';      // 'all' | 'need' | 'out'
-let PERSON = '';         // '' = すべて
 let SHOW_ENDED = false;
 let EDIT_BUY = null;
 let EDIT_MED = null;
@@ -871,9 +855,7 @@ function statusOf(med, st) {
    ============================================================ */
 
 function visibleMeds() {
-  return S.meds
-    .filter(m => SHOW_ENDED || m.active)
-    .filter(m => !PERSON || m.person === PERSON);
+  return S.meds.filter(m => SHOW_ENDED || m.active);
 }
 
 function renderList() {
@@ -918,23 +900,15 @@ function renderList() {
   renderPlan();
 
   // フィルタ
-  const persons = [...new Set(S.meds.filter(m => m.person).map(m => m.person))].sort();
   const chips = [
     `<button class="todo ${FILTER === 'all' ? 'active' : ''}" data-f="all">すべて <b>${active.length}</b></button>`,
     `<button class="todo ${FILTER === 'need' ? 'active' : ''} ${need.length ? '' : 'zero'}" data-f="need">要補充 <b>${need.length}</b></button>`,
     `<button class="todo ${FILTER === 'out' ? 'active' : ''} ${out.length ? '' : 'zero'}" data-f="out">切れている <b>${out.length}</b></button>`
   ];
-  if (persons.length) {
-    chips.push(`<span style="width:8px"></span>`);
-    chips.push(`<button class="todo ${PERSON === '' ? 'active' : ''}" data-p="">全員</button>`);
-    persons.forEach(p => chips.push(
-      `<button class="todo ${PERSON === p ? 'active' : ''}" data-p="${esc(p)}">${esc(p)} <b>${S.meds.filter(m => m.person === p && m.active).length}</b></button>`));
-  }
   const ended = S.meds.filter(m => !m.active).length;
   if (ended) chips.push(`<button class="todo ${SHOW_ENDED ? 'active' : ''}" data-e="1">終了した薬 <b>${ended}</b></button>`);
   $('todos').innerHTML = chips.join('');
   $('todos').querySelectorAll('[data-f]').forEach(b => b.onclick = () => { FILTER = b.dataset.f; renderList(); });
-  $('todos').querySelectorAll('[data-p]').forEach(b => b.onclick = () => { PERSON = b.dataset.p; renderList(); });
   $('todos').querySelectorAll('[data-e]').forEach(b => b.onclick = () => { SHOW_ENDED = !SHOW_ENDED; renderList(); });
 
   // カード
@@ -985,7 +959,7 @@ function cardHtml({ m, st }) {
 
   return `<div class="d ${m.active ? '' : 'ended'}" style="--cat:${CAT_COLOR[m.category]}">
     <div class="d-main">
-      <div class="d-name">${m.person ? `<span class="who">${esc(m.person)}</span>` : ''}${esc(m.name)}</div>
+      <div class="d-name">${esc(m.name)}</div>
       <div class="d-sub">${esc(m.category)}・${m.perDay > 0 ? `1日 ${qty(m.perDay)}${esc(m.unit)}` : '頓服'}${m.memo ? '・' + esc(m.memo) : ''}</div>
       <div class="d-meta">
         ${last ? `<span>直近 ${jdate(last.date)}${last.amount ? ' ' + yen(last.amount) + '円' : ''}${last.place ? ' / ' + esc(last.place) : ''}</span>` : ''}
@@ -1011,7 +985,7 @@ function cardHtml({ m, st }) {
 
 function renderPlan() {
   const groups = {};
-  S.meds.filter(m => m.active).filter(m => !PERSON || m.person === PERSON).forEach(m => {
+  S.meds.filter(m => m.active).forEach(m => {
     const st = stock(m);
     if (st.runOut == null) return;
     const key = m.place || '（入手先の登録なし）';
@@ -1048,10 +1022,9 @@ function fillMedSelect(sel, opts) {
   const o = opts || {};
   const list = S.meds.slice().sort((a, b) =>
     (a.active === b.active ? 0 : a.active ? -1 : 1) ||
-    (a.person || '').localeCompare(b.person || '', 'ja') ||
     a.name.localeCompare(b.name, 'ja'));
   const items = list.map(m =>
-    `<option value="${m.id}">${esc((m.person ? m.person + '／' : '') + m.name)}${m.active ? '' : '（終了）'}</option>`);
+    `<option value="${m.id}">${esc(m.name)}${m.active ? '' : '（終了）'}</option>`);
   sel.innerHTML = (o.head || '') + items.join('') + (o.tail || '');
 }
 
@@ -1119,7 +1092,7 @@ function openEntry(buyId, medId) {
     $('fPlace').value = m ? m.place : '';
     $('btnDelete').classList.add('hidden');
   }
-  ['nName', 'nPerson', 'nPerDay'].forEach(id => $(id).value = '');
+  ['nName', 'nPerDay'].forEach(id => $(id).value = '');
   $('fMed').onchange();
   $('fKind').onchange();
   msg($('entryMsg'), '', 'info');
@@ -1162,7 +1135,7 @@ function saveBuy() {
     if ($('nPerDay').value === '') return msg(el, '1日の消費量を入れてください（頓服なら 0）。', 'err');
     const form = $('nForm').value;
     const m = normMed({
-      name, person: $('nPerson').value, category: $('nCat').value, form,
+      name, category: $('nCat').value, form,
       unit: $('nUnit').value || FORM_UNIT[form], perDay: $('nPerDay').value,
       place: $('fPlace').value, active: true
     });
@@ -1230,7 +1203,6 @@ function openMed(id) {
     if (!m) return;
     $('medTitle').textContent = '薬を編集する';
     $('mName').value = m.name;
-    $('mPerson').value = m.person;
     $('mCat').value = m.category;
     $('mForm').value = m.form;
     $('mPerDay').value = m.perDay;
@@ -1242,7 +1214,7 @@ function openMed(id) {
     $('btnMedDelete').classList.remove('hidden');
   } else {
     $('medTitle').textContent = '薬を登録する';
-    ['mName', 'mPerson', 'mPerDay', 'mPlace', 'mWarn', 'mMemo'].forEach(k => $(k).value = '');
+    ['mName', 'mPerDay', 'mPlace', 'mWarn', 'mMemo'].forEach(k => $(k).value = '');
     $('mCat').value = 'その他';
     $('mForm').value = '錠剤';
     $('mUnit').value = '錠';
@@ -1262,7 +1234,7 @@ function saveMed() {
 
   const m = normMed({
     id: EDIT_MED || undefined,
-    name: $('mName').value, person: $('mPerson').value, category: $('mCat').value,
+    name: $('mName').value, category: $('mCat').value,
     form: $('mForm').value, unit: $('mUnit').value, perDay: $('mPerDay').value,
     place: $('mPlace').value, warnDays: $('mWarn').value === '' ? null : $('mWarn').value,
     active: $('mActive').value === '1', memo: $('mMemo').value
@@ -1278,14 +1250,13 @@ function saveMed() {
 function renderMedTable() {
   const list = S.meds.slice().sort((a, b) =>
     (a.active === b.active ? 0 : a.active ? -1 : 1) ||
-    (a.person || '').localeCompare(b.person || '', 'ja') ||
     a.name.localeCompare(b.name, 'ja'));
 
   if (!list.length) { $('medTable').innerHTML = `<tr><td class="wrap-c"><div class="empty">まだ登録がありません。</div></td></tr>`; return; }
 
   $('medTable').innerHTML = `
     <thead><tr>
-      <th>薬</th><th>服用者</th><th>分類</th><th class="n">1日</th><th class="n">残り</th>
+      <th>薬</th><th>分類</th><th class="n">1日</th><th class="n">残り</th>
       <th>切れる日</th><th class="n">通知</th><th>状態</th><th></th>
     </tr></thead>
     <tbody>${list.map(m => {
@@ -1294,7 +1265,6 @@ function renderMedTable() {
       const ro = st.runOut ? jdateY(st.runOut) : '—';
       return `<tr>
         <td class="wrap-c"><span style="display:inline-block;width:8px;height:8px;background:${CAT_COLOR[m.category]};margin-right:6px"></span>${esc(m.name)}</td>
-        <td>${esc(m.person || '—')}</td>
         <td>${esc(m.category)}</td>
         <td class="n">${m.perDay > 0 ? qty(m.perDay) + esc(m.unit) : '頓服'}</td>
         <td class="n">${rest}</td>
@@ -1316,24 +1286,18 @@ function initHist() {
   $('hPrev').onclick = () => { H_YEAR = (H_YEAR || new Date().getFullYear()) - 1; renderHist(); };
   $('hNext').onclick = () => { H_YEAR = (H_YEAR || new Date().getFullYear()) + 1; renderHist(); };
   $('hMed').onchange = renderHist;
-  $('hPerson').onchange = renderHist;
 }
 
 function renderHist() {
-  const keepMed = $('hMed').value, keepP = $('hPerson').value;
+  const keepMed = $('hMed').value;
   fillMedSelect($('hMed'), { head: `<option value="">すべての薬</option>` });
   $('hMed').value = keepMed && (keepMed === '' || medById(keepMed)) ? keepMed : '';
-
-  const persons = [...new Set(S.meds.filter(m => m.person).map(m => m.person))].sort();
-  $('hPerson').innerHTML = `<option value="">全員</option>` + persons.map(p => `<option>${esc(p)}</option>`).join('');
-  $('hPerson').value = persons.includes(keepP) ? keepP : '';
 
   $('hYear').textContent = H_YEAR ? H_YEAR : '全期間';
 
   let rows = S.buys.filter(b => b.date);
   if (H_YEAR) rows = rows.filter(b => b.date.startsWith(String(H_YEAR)));
   if ($('hMed').value) rows = rows.filter(b => b.medId === $('hMed').value);
-  if ($('hPerson').value) rows = rows.filter(b => (medById(b.medId) || {}).person === $('hPerson').value);
   rows.sort((a, b) => b.date.localeCompare(a.date));
 
   if (!rows.length) {
@@ -1344,16 +1308,15 @@ function renderHist() {
 
   $('histTable').innerHTML = `
     <thead><tr>
-      <th>日付</th><th>薬</th><th>服用者</th><th>種別</th>
+      <th>日付</th><th>薬</th><th>種別</th>
       <th class="n">数量</th><th class="n">日数</th><th class="n">金額</th><th>入手先</th><th>メモ</th><th></th>
     </tr></thead>
     <tbody>${rows.map(b => {
-      const m = medById(b.medId) || { name: '（削除済み）', unit: '', person: '', perDay: 0 };
+      const m = medById(b.medId) || { name: '（削除済み）', unit: '', perDay: 0 };
       const d = b.kind === 'adjust' ? '—' : (() => { const x = supplyDays(m, b); return x > 0 ? qty(x) + '日' : '—'; })();
       return `<tr>
         <td class="n">${b.date}</td>
         <td class="wrap-c">${esc(m.name)}</td>
-        <td>${esc(m.person || '—')}</td>
         <td>${KIND_LABEL[b.kind]}</td>
         <td class="n">${qty(b.qty)}${esc(m.unit)}</td>
         <td class="n">${d}</td>
@@ -1363,7 +1326,7 @@ function renderHist() {
         <td><button class="chip" data-eb="${b.id}">編集</button></td>
       </tr>`;
     }).join('')}
-    <tr class="total"><td colspan="6">${rows.length} 件</td><td class="n">${yen(sum)}</td><td colspan="3"></td></tr>
+    <tr class="total"><td colspan="5">${rows.length} 件</td><td class="n">${yen(sum)}</td><td colspan="3"></td></tr>
     </tbody>`;
 
   $('histTable').querySelectorAll('[data-eb]').forEach(b => b.onclick = () => openEntry(b.dataset.eb));
@@ -1376,7 +1339,6 @@ function renderHist() {
 function initStats() {
   $('sPrev').onclick = () => { S_YEAR--; renderStats(); };
   $('sNext').onclick = () => { S_YEAR++; renderStats(); };
-  $('sPerson').onchange = renderStats;
 }
 
 function bars(items, unitLabel) {
@@ -1392,16 +1354,9 @@ function bars(items, unitLabel) {
 }
 
 function renderStats() {
-  const keepP = $('sPerson').value;
-  const persons = [...new Set(S.meds.filter(m => m.person).map(m => m.person))].sort();
-  $('sPerson').innerHTML = `<option value="">全員</option>` + persons.map(p => `<option>${esc(p)}</option>`).join('');
-  $('sPerson').value = persons.includes(keepP) ? keepP : '';
-  const P = $('sPerson').value;
-
   $('sYear').textContent = S_YEAR;
 
-  const inScope = b => !P || (medById(b.medId) || {}).person === P;
-  const all = S.buys.filter(b => b.date && b.amount && inScope(b));
+  const all = S.buys.filter(b => b.date && b.amount);
   const year = all.filter(b => b.date.startsWith(String(S_YEAR)));
   const total = year.reduce((a, b) => a + b.amount, 0);
 
@@ -1431,7 +1386,6 @@ function renderStats() {
   };
   $('byMed').innerHTML = bars(sumBy(b => (medById(b.medId) || {}).name || '（削除済み）'));
   $('byPlace').innerHTML = bars(sumBy(b => b.place || '（入手先なし）'));
-  $('byPerson').innerHTML = bars(sumBy(b => (medById(b.medId) || {}).person || '（服用者なし）'));
   $('byCat').innerHTML = bars(sumBy(b => (medById(b.medId) || {}).category || 'その他'));
 
   const gy = {};
@@ -1456,11 +1410,11 @@ function initSettings() {
     msg($('dataMsg'), '書き出しました。', 'ok');
   };
   $('btnExportCsv').onclick = () => {
-    const head = ['仕入れ日', '薬', '服用者', '分類', '種別', '数量', '単位', '日数分', '金額', '入手先', 'メモ'];
+    const head = ['仕入れ日', '薬', '分類', '種別', '数量', '単位', '日数分', '金額', '入手先', 'メモ'];
     const rows = S.buys.slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')).map(b => {
-      const m = medById(b.medId) || { name: '（削除済み）', person: '', category: '', unit: '', perDay: 0 };
+      const m = medById(b.medId) || { name: '（削除済み）', category: '', unit: '', perDay: 0 };
       const d = b.kind === 'adjust' ? '' : supplyDays(m, b);
-      return [b.date, m.name, m.person, m.category, KIND_LABEL[b.kind], b.qty, m.unit,
+      return [b.date, m.name, m.category, KIND_LABEL[b.kind], b.qty, m.unit,
               d ? Math.round(d * 10) / 10 : '', b.amount, b.place, b.memo];
     });
     const csv = [head, ...rows].map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
@@ -1896,20 +1850,30 @@ function initSync() {
 
 function refreshDatalists() {
   const places = [...new Set([...S.buys.map(b => b.place), ...S.meds.map(m => m.place)].filter(Boolean))].sort();
-  const persons = [...new Set(S.meds.map(m => m.person).filter(Boolean))].sort();
   const units = [...new Set([...UNITS, ...S.meds.map(m => m.unit).filter(Boolean)])];
   const opt = a => a.map(v => `<option value="${esc(v)}">`).join('');
   ['dlPlace', 'dlPlace2'].forEach(id => $(id).innerHTML = opt(places));
-  ['dlPerson', 'dlPerson2'].forEach(id => $(id).innerHTML = opt(persons));
   ['dlUnit', 'dlUnit2'].forEach(id => $(id).innerHTML = opt(units));
 }
 
 function renderAll() {
   TODAY = todayStr();
   refreshDatalists();
+  syncMedSelect();
   renderList();
   renderMedTable();
   renderHist();
+}
+
+// 薬が増減しても記録タブの選択肢が古いままにならないように、選択は保ったまま作り直す
+function syncMedSelect() {
+  const keep = $('fMed').value;
+  fillMedSelect($('fMed'), { tail: `<option value="${NEW_MED}">＋ 新しい薬を登録する</option>` });
+  if (keep === NEW_MED || (keep && medById(keep))) $('fMed').value = keep;
+  else if (!S.meds.length) $('fMed').value = NEW_MED;
+  // 薬が無いあいだは新規登録が選ばれている。薬が増えたら、書きかけでない限りそちらへ寄せる
+  if ($('fMed').value === NEW_MED && S.meds.length && !$('nName').value.trim()) $('fMed').selectedIndex = 0;
+  $('newMedBox').classList.toggle('hidden', $('fMed').value !== NEW_MED);
 }
 
 const TABS = ['list', 'entry', 'meds', 'hist', 'stats', 'settings'];
