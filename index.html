@@ -180,11 +180,14 @@
   /* ---- 薬カード ---- */
   .dlist { display: flex; flex-direction: column; gap: 8px; }
   .d {
-    background: var(--card); border: 1px solid var(--rule); border-left: 4px solid var(--cat, var(--rule));
+    background: var(--card); border: 1px solid var(--rule); border-left: 4px solid var(--rule);
     padding: 11px 14px; display: grid; grid-template-columns: 1fr auto; gap: 4px 14px;
     align-items: start;
   }
   .d.ended { opacity: .55; }
+  .d.s-ok   { border-left-color: var(--accent); }
+  .d.s-warn { border-left-color: var(--gold); }
+  .d.s-bad  { border-left-color: var(--alert); }
   .d-main { min-width: 0; }
   .d-name { font-size: 15px; font-weight: 700; letter-spacing: .02em; overflow-wrap: anywhere; }
   .d-sub { font-size: 12.5px; color: var(--ink-dim); margin-top: 1px; overflow-wrap: anywhere; }
@@ -422,10 +425,6 @@
             <input type="text" id="nName" placeholder="アムロジピン 5mg" autocomplete="off">
           </div>
           <div>
-            <label>分類</label>
-            <select id="nCat"></select>
-          </div>
-          <div>
             <label>剤形</label>
             <select id="nForm"></select>
           </div>
@@ -460,10 +459,6 @@
         <div style="grid-column:1/-1">
           <label>薬の名前<span class="req">＊</span></label>
           <input type="text" id="mName" placeholder="アムロジピン 5mg" autocomplete="off">
-        </div>
-        <div>
-          <label>分類</label>
-          <select id="mCat"></select>
         </div>
         <div>
           <label>剤形</label>
@@ -550,7 +545,6 @@
     <div class="card"><div class="card-title">月別</div><div id="byMonth"></div></div>
     <div class="card"><div class="card-title">薬別</div><div id="byMed"></div></div>
     <div class="card"><div class="card-title">入手先別</div><div id="byPlace"></div></div>
-    <div class="card"><div class="card-title">分類別</div><div id="byCat"></div></div>
     <div class="card"><div class="card-title">年ごとの推移</div><div id="byYear"></div></div>
   </section>
 
@@ -658,27 +652,6 @@
 const KEY = 'kusuri-daicho-v1';
 const BUILD = '2026-08-07';
 
-const CATS = [
-  ['降圧・心臓',      '#a5453a'],
-  ['脂質・代謝',      '#b3872f'],
-  ['糖尿病',          '#c15b7a'],
-  ['胃腸',            '#4f7c3f'],
-  ['アレルギー',      '#3f8a86'],
-  ['痛み・解熱',      '#a04a2a'],
-  ['睡眠・精神',      '#5b4b8a'],
-  ['ホルモン・甲状腺','#8a6b3f'],
-  ['骨・関節',        '#6b7280'],
-  ['泌尿器',          '#2c6e8f'],
-  ['目・耳・鼻',      '#3a6fa0'],
-  ['皮膚・外用',      '#7a6a5a'],
-  ['感染症・抗菌',    '#4a5b6b'],
-  ['漢方',            '#6b7d4a'],
-  ['ビタミン・サプリ','#c9a227'],
-  ['その他',          '#8a8a7a']
-];
-const CAT_NAMES = CATS.map(c => c[0]);
-const CAT_COLOR = Object.fromEntries(CATS);
-
 // 剤形 → 既定の単位
 const FORMS = [
   ['錠剤',        '錠'],
@@ -741,7 +714,6 @@ function normMed(m) {
   return {
     id: m.id || uid(),
     name: String(m.name || '').trim(),
-    category: CAT_NAMES.includes(m.category) ? m.category : 'その他',
     form,
     unit: String(m.unit || '').trim() || FORM_UNIT[form],
     perDay: numf(m.perDay),
@@ -843,11 +815,11 @@ function supplyDays(med, b) {
 }
 
 function statusOf(med, st) {
-  if (st.none) return { cls: '', label: '記録なし', rank: 3 };
-  if (st.asNeeded) return { cls: '', label: '頓服', rank: 2 };
-  if (st.days < 0) return { cls: 'bad', label: '切れています', rank: 0 };
-  if (st.days <= warnOf(med)) return { cls: 'warn', label: 'そろそろ補充', rank: 0 };
-  return { cls: '', label: '足りています', rank: 1 };
+  if (st.none) return { cls: '', tone: 'idle', label: '記録なし' };
+  if (st.asNeeded) return { cls: '', tone: 'idle', label: '頓服' };
+  if (st.days < 0) return { cls: 'bad', tone: 'bad', label: '切れています' };
+  if (st.days <= warnOf(med)) return { cls: 'warn', tone: 'warn', label: 'そろそろ補充' };
+  return { cls: '', tone: 'ok', label: '足りています' };
 }
 
 /* ============================================================
@@ -957,10 +929,10 @@ function cardHtml({ m, st }) {
     g = `<div class="gauge ${st.days < 0 ? 'over' : st.days <= w ? 'warn' : ''}"><i style="width:${(p * 100).toFixed(1)}%"></i></div>`;
   }
 
-  return `<div class="d ${m.active ? '' : 'ended'}" style="--cat:${CAT_COLOR[m.category]}">
+  return `<div class="d s-${stt.tone} ${m.active ? '' : 'ended'}">
     <div class="d-main">
       <div class="d-name">${esc(m.name)}</div>
-      <div class="d-sub">${esc(m.category)}・${m.perDay > 0 ? `1日 ${qty(m.perDay)}${esc(m.unit)}` : '頓服'}${m.memo ? '・' + esc(m.memo) : ''}</div>
+      <div class="d-sub">${m.perDay > 0 ? `1日 ${qty(m.perDay)}${esc(m.unit)}` : '頓服'}${m.memo ? '・' + esc(m.memo) : ''}</div>
       <div class="d-meta">
         ${last ? `<span>直近 ${jdate(last.date)}${last.amount ? ' ' + yen(last.amount) + '円' : ''}${last.place ? ' / ' + esc(last.place) : ''}</span>` : ''}
         ${count ? `<span>累計 ${count}回 ${yen(total)}円</span>` : ''}
@@ -972,7 +944,7 @@ function cardHtml({ m, st }) {
     </div>
     ${g}
     <div class="d-bottom">
-      <span class="chip tag ${stt.cls === 'bad' ? 'warn' : stt.cls === 'warn' ? 'mid' : stt.label === '足りています' ? 'done' : ''}">${stt.label}</span>
+      <span class="chip tag ${stt.tone === 'bad' ? 'warn' : stt.tone === 'warn' ? 'mid' : stt.tone === 'ok' ? 'done' : ''}">${stt.label}</span>
       ${m.active ? '' : '<span class="chip tag">終了</span>'}
       ${m.place ? `<span class="chip tag">${esc(m.place)}</span>` : ''}
       <div class="grow"></div>
@@ -1029,7 +1001,6 @@ function fillMedSelect(sel, opts) {
 }
 
 function initEntry() {
-  $('nCat').innerHTML = CAT_NAMES.map(c => `<option>${c}</option>`).join('');
   $('nForm').innerHTML = FORM_NAMES.map(f => `<option>${f}</option>`).join('');
   $('nForm').onchange = () => { $('nUnit').value = FORM_UNIT[$('nForm').value]; updateCalcHint(); };
 
@@ -1135,7 +1106,7 @@ function saveBuy() {
     if ($('nPerDay').value === '') return msg(el, '1日の消費量を入れてください（頓服なら 0）。', 'err');
     const form = $('nForm').value;
     const m = normMed({
-      name, category: $('nCat').value, form,
+      name, form,
       unit: $('nUnit').value || FORM_UNIT[form], perDay: $('nPerDay').value,
       place: $('fPlace').value, active: true
     });
@@ -1178,7 +1149,6 @@ function saveBuy() {
    ============================================================ */
 
 function initMeds() {
-  $('mCat').innerHTML = CAT_NAMES.map(c => `<option>${c}</option>`).join('');
   $('mForm').innerHTML = FORM_NAMES.map(f => `<option>${f}</option>`).join('');
   $('mForm').onchange = () => { if (!EDIT_MED || !$('mUnit').value) $('mUnit').value = FORM_UNIT[$('mForm').value]; };
   $('btnMedSave').onclick = saveMed;
@@ -1203,7 +1173,6 @@ function openMed(id) {
     if (!m) return;
     $('medTitle').textContent = '薬を編集する';
     $('mName').value = m.name;
-    $('mCat').value = m.category;
     $('mForm').value = m.form;
     $('mPerDay').value = m.perDay;
     $('mUnit').value = m.unit;
@@ -1215,7 +1184,6 @@ function openMed(id) {
   } else {
     $('medTitle').textContent = '薬を登録する';
     ['mName', 'mPerDay', 'mPlace', 'mWarn', 'mMemo'].forEach(k => $(k).value = '');
-    $('mCat').value = 'その他';
     $('mForm').value = '錠剤';
     $('mUnit').value = '錠';
     $('mActive').value = '1';
@@ -1234,7 +1202,7 @@ function saveMed() {
 
   const m = normMed({
     id: EDIT_MED || undefined,
-    name: $('mName').value, category: $('mCat').value,
+    name: $('mName').value,
     form: $('mForm').value, unit: $('mUnit').value, perDay: $('mPerDay').value,
     place: $('mPlace').value, warnDays: $('mWarn').value === '' ? null : $('mWarn').value,
     active: $('mActive').value === '1', memo: $('mMemo').value
@@ -1256,7 +1224,7 @@ function renderMedTable() {
 
   $('medTable').innerHTML = `
     <thead><tr>
-      <th>薬</th><th>分類</th><th class="n">1日</th><th class="n">残り</th>
+      <th>薬</th><th class="n">1日</th><th class="n">残り</th>
       <th>切れる日</th><th class="n">通知</th><th>状態</th><th></th>
     </tr></thead>
     <tbody>${list.map(m => {
@@ -1264,8 +1232,7 @@ function renderMedTable() {
       const rest = st.none ? '—' : st.asNeeded ? `${qty(st.rest)}${esc(m.unit)}` : `${Math.max(0, Math.floor(st.days))}日`;
       const ro = st.runOut ? jdateY(st.runOut) : '—';
       return `<tr>
-        <td class="wrap-c"><span style="display:inline-block;width:8px;height:8px;background:${CAT_COLOR[m.category]};margin-right:6px"></span>${esc(m.name)}</td>
-        <td>${esc(m.category)}</td>
+        <td class="wrap-c">${esc(m.name)}</td>
         <td class="n">${m.perDay > 0 ? qty(m.perDay) + esc(m.unit) : '頓服'}</td>
         <td class="n">${rest}</td>
         <td class="n">${ro}</td>
@@ -1386,7 +1353,6 @@ function renderStats() {
   };
   $('byMed').innerHTML = bars(sumBy(b => (medById(b.medId) || {}).name || '（削除済み）'));
   $('byPlace').innerHTML = bars(sumBy(b => b.place || '（入手先なし）'));
-  $('byCat').innerHTML = bars(sumBy(b => (medById(b.medId) || {}).category || 'その他'));
 
   const gy = {};
   all.forEach(b => { const y = b.date.slice(0, 4); gy[y] = (gy[y] || 0) + b.amount; });
@@ -1410,11 +1376,11 @@ function initSettings() {
     msg($('dataMsg'), '書き出しました。', 'ok');
   };
   $('btnExportCsv').onclick = () => {
-    const head = ['仕入れ日', '薬', '分類', '種別', '数量', '単位', '日数分', '金額', '入手先', 'メモ'];
+    const head = ['仕入れ日', '薬', '種別', '数量', '単位', '日数分', '金額', '入手先', 'メモ'];
     const rows = S.buys.slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')).map(b => {
-      const m = medById(b.medId) || { name: '（削除済み）', category: '', unit: '', perDay: 0 };
+      const m = medById(b.medId) || { name: '（削除済み）', unit: '', perDay: 0 };
       const d = b.kind === 'adjust' ? '' : supplyDays(m, b);
-      return [b.date, m.name, m.category, KIND_LABEL[b.kind], b.qty, m.unit,
+      return [b.date, m.name, KIND_LABEL[b.kind], b.qty, m.unit,
               d ? Math.round(d * 10) / 10 : '', b.amount, b.place, b.memo];
     });
     const csv = [head, ...rows].map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
