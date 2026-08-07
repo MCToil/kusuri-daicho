@@ -316,6 +316,15 @@
   .modal .sides span { display: block; font-size: 11px; color: var(--ink-dim); letter-spacing: .1em; }
   .modal .sides b { display: block; font-family: var(--font-num); font-size: 13px; font-weight: 600; margin-top: 2px; }
   .modal .acts { display: flex; flex-direction: column; gap: 7px; }
+  .modal .revs { display: flex; flex-direction: column; gap: 1px; background: var(--rule-soft); margin: 14px 0; max-height: 46vh; overflow: auto; }
+  .modal .rev {
+    background: var(--card); border: none; text-align: left; padding: 9px 12px;
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px; width: 100%;
+  }
+  .modal .rev:hover { background: var(--accent-soft); }
+  .modal .rev .when { font-family: var(--font-num); font-size: 12.5px; }
+  .modal .rev .diff { font-family: var(--font-num); font-size: 11.5px; color: var(--ink-dim); }
+  .modal .rev .diff .cut { color: var(--alert); }
 
   /* トースト */
   #toast {
@@ -622,6 +631,7 @@
         <div class="actions">
           <button class="btn primary" id="syncSave">保存して同期</button>
           <button class="btn" id="syncCopyId">Gist ID をコピー</button>
+          <button class="btn" id="syncHistory">クラウドの履歴から復元</button>
           <button class="btn hidden" id="syncRestore">取り込み前のデータに戻す</button>
           <button class="btn danger" id="syncClear">この端末の同期を解除</button>
         </div>
@@ -741,6 +751,7 @@ function blank() {
   };
 }
 
+let LOAD_FAILED = false;
 let S = load();
 function load() {
   try {
@@ -762,8 +773,18 @@ function load() {
     // 「この端末には変更が無い」と判定され、クラウドで黙って上書きされる。
     if (!d.updatedAt && (d.meds.length || d.buys.length)) d.updatedAt = new Date().toISOString();
     return d;
-  } catch (e) { return blank(); }
+  } catch (e) {
+    // 壊れた内容を読み飛ばして白紙にすると、それをクラウドへ送って全部消しかねない。
+    // 「読めなかった」ことを覚えておき、送信側で止める。
+    LOAD_FAILED = true;
+    return blank();
+  }
 }
+
+// この端末の台帳が「作られたもの」か。updatedAt は save() でしか進まないので、
+// 空のままの白紙は、一度も編集されていないか、読み出せなかったかのどちらか。
+// どちらにせよクラウドへ送ってよい中身ではない。
+function authored() { return !LOAD_FAILED && !!S.updatedAt; }
 
 // persist は書くだけ。save は「中身が変わった」の意味で、更新時刻を進めて同期も予約する。
 function persist() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* 保存できなくても操作は続けられる */ } }
@@ -1837,6 +1858,12 @@ function fetchRemote() {
 }
 
 function pushRemote() {
+  // 最後の砦。ここを通らない送信経路は作らない。
+  if (!authored()) {
+    return Promise.reject(new Error(LOAD_FAILED
+      ? 'この端末の台帳を読み出せませんでした。クラウドを壊さないよう、保存を中止しました。'
+      : 'この端末の台帳が白紙なので、クラウドへの保存を中止しました。'));
+  }
   const body = { description: '薬台帳のデータ', files: {} };
   body.files[GIST_FILE] = { content: payload() };
   const creating = !SY.gistId;
@@ -1903,14 +1930,23 @@ function runSync(manual) {
   work.then(remote => {
     if (!remote) return pushRemote();
 
+    const remoteHas = remote.meds.length || remote.buys.length;
+
+    // 手元が白紙のとき（初めての端末、localStorage が消えた、読み出しに失敗した）は、
+    // 送る側には絶対に回さない。聞かずに取り込む。ここで確認を挟むと、
+    // 押し間違いひとつでクラウドが消える。
+    if (!authored()) {
+      if (remoteHas) return applyRemote(remote);
+      return '最新です';
+    }
+
     const localChanged = S.updatedAt !== SY.lastSyncedAt;
     const remoteChanged = remote.updatedAt !== SY.lastSyncedAt;
     const localEmpty = !S.meds.length && !S.buys.length;
-    const remoteHas = remote.meds.length || remote.buys.length;
 
     if (!localChanged && !remoteChanged) return '最新です';
 
-    // 手元が空のときに送ると、クラウドの中身を消してしまう。
+    // 全消去のあとなど、手元を空にしたうえで送る場合は確認する。
     if (localEmpty && remoteHas) return askConflict(remote, 'empty');
     // 取り込むと手元の記録が減る場合も、黙って適用しない。
     if (remote.buys.length < S.buys.length || remote.meds.length < S.meds.length)
@@ -1995,6 +2031,108 @@ function askConflict(remote, mode) {
   });
 }
 
+/* ---- クラウドの履歴から戻す ----
+   Gist は書き換えるたびに版が残る。手元が壊れても、あるいは白紙で
+   上書きしてしまっても、GitHub 側には過去の中身がそのまま残っている。 */
+
+function openGistHistory() {
+  if (!SY.token || !SY.gistId) {
+    msg($('syncMsg'), '先にトークンと Gist ID を保存してください。', 'err');
+    return;
+  }
+  toast('履歴を読んでいます…');
+  fetch(`${GH_API}/gists/${encodeURIComponent(SY.gistId)}`, { headers: ghHeaders() })
+    .then(res => { if (!res.ok) throw ghError(res); return res.json(); })
+    .then(g => showRevisions(g.history || []))
+    .catch(err => toast(err && err.message ? err.message : '履歴を読めませんでした。'));
+}
+
+function showRevisions(history) {
+  if (!history.length) { toast('履歴がありません。'); return; }
+
+  const back = document.createElement('div');
+  back.className = 'modal-back';
+  const card = document.createElement('div');
+  card.className = 'modal';
+  card.setAttribute('role', 'dialog');
+  card.setAttribute('aria-modal', 'true');
+
+  const h = document.createElement('h3');
+  h.textContent = 'クラウドの履歴';
+  const p = document.createElement('p');
+  p.textContent = '保存するたびに版が残っています。戻したい時点を選ぶと、中身を確かめてから取り込めます。'
+    + '行が減っている版（赤）は、そのとき中身が失われた版です。その1つ下を選んでください。';
+  card.append(h, p);
+
+  const revs = document.createElement('div');
+  revs.className = 'revs';
+  history.slice(0, 30).forEach(r => {
+    const b = document.createElement('button');
+    b.className = 'rev';
+    const cs = r.change_status || {};
+    const when = document.createElement('span');
+    when.className = 'when';
+    when.textContent = fmtFull(r.committed_at);
+    const diff = document.createElement('span');
+    diff.className = 'diff';
+    diff.innerHTML = (cs.additions ? `+${cs.additions} ` : '')
+      + (cs.deletions ? `<span class="${cs.deletions > (cs.additions || 0) * 3 + 10 ? 'cut' : ''}">−${cs.deletions}</span>` : '');
+    b.append(when, diff);
+    b.onclick = () => { close(); previewRevision(r.version); };
+    revs.appendChild(b);
+  });
+  card.appendChild(revs);
+
+  const acts = document.createElement('div');
+  acts.className = 'acts';
+  const cancel = document.createElement('button');
+  cancel.className = 'btn';
+  cancel.textContent = '閉じる';
+  cancel.onclick = () => close();
+  acts.appendChild(cancel);
+  card.appendChild(acts);
+
+  function close() { document.removeEventListener('keydown', onKey); back.remove(); }
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  back.appendChild(card);
+  back.addEventListener('click', e => { if (e.target === back) close(); });
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(back);
+  cancel.focus();
+}
+
+function previewRevision(version) {
+  toast('その版を読んでいます…');
+  fetch(`${GH_API}/gists/${encodeURIComponent(SY.gistId)}/${encodeURIComponent(version)}`, { headers: ghHeaders() })
+    .then(res => { if (!res.ok) throw ghError(res); return res.json(); })
+    .then(g => {
+      const f = g.files && g.files[GIST_FILE];
+      if (!f) throw new Error('この版に台帳のファイルがありません。');
+      return (f.truncated && f.raw_url ? fetch(f.raw_url).then(r => r.text()) : Promise.resolve(f.content));
+    })
+    .then(text => {
+      const old = parseRemote(text);
+      const when = fmtFull(old.updatedAt);
+      if (!confirm(`${when} の版：薬 ${old.meds.length}件・記録 ${old.buys.length}件。\n\n`
+        + `この内容をこの端末に取り込み、クラウドにも書き戻します。いまの内容（薬 ${S.meds.length}件・記録 ${S.buys.length}件）は失われます。よろしいですか？`)) return;
+      applyRemote(old);
+      // 取り込んだだけではクラウドは古い版のまま。書き戻して他の端末にも行き渡らせる。
+      S.updatedAt = new Date().toISOString();
+      persist();
+      SY.lastSyncedAt = '';
+      pushRemote().then(() => { idleStatus(); toast('その版に戻しました。'); })
+        .catch(err => toast(err && err.message ? err.message : '書き戻せませんでした。'));
+    })
+    .catch(err => toast(err && err.message ? err.message : 'その版を読めませんでした。'));
+}
+
+function fmtFull(iso) {
+  if (!iso) return '（時刻なし）';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '（時刻なし）';
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
 function scheduleSync() {
   idleStatus();
   if (!SY.token) return;
@@ -2046,6 +2184,8 @@ function initSync() {
     $('syncPanel').classList.add('hidden');
     runSync(true);
   };
+
+  $('syncHistory').onclick = openGistHistory;
 
   $('syncCopyId').onclick = () => {
     if (!SY.gistId) { msg($('syncMsg'), 'まだ Gist がありません。先に「保存して同期」を実行してください。', 'err'); return; }
