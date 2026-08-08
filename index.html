@@ -471,16 +471,33 @@
             <select id="nForm"></select>
           </div>
           <div>
-            <label>1日の消費量<span class="req">＊</span></label>
-            <input type="number" id="nPerDay" inputmode="decimal" step="any" min="0" placeholder="1">
+            <label>1回の量<span class="req">＊</span></label>
+            <input type="number" id="nDose" inputmode="decimal" step="any" min="0" placeholder="1">
           </div>
           <div>
             <label>単位</label>
             <input type="text" id="nUnit" list="dlUnit" placeholder="錠" autocomplete="off">
             <datalist id="dlUnit"></datalist>
           </div>
+          <div>
+            <label>飲みかた</label>
+            <select id="nSched">
+            <option value="daily">毎日</option>
+            <option value="interval">◯日ごと</option>
+            <option value="weekly">週◯回</option>
+            <option value="prn">頓服（必要なときだけ）</option>
+            </select>
+          </div>
+          <div id="nWrapEvery" class="hidden">
+            <label>何日ごと</label>
+            <input type="number" id="nEvery" inputmode="numeric" min="1" step="1" placeholder="2">
+          </div>
+          <div id="nWrapTimes" class="hidden">
+            <label>週に何回</label>
+            <input type="number" id="nTimes" inputmode="numeric" min="1" step="1" placeholder="1">
+          </div>
         </div>
-        <div class="hint">頓服・必要時だけ使う薬は <b>1日の消費量を 0</b> にしてください。残量は数量の積み上げだけで管理し、切れる日は予測しません。</div>
+        <div class="hint" id="nDoseHint"></div>
       </fieldset>
 
       <div class="actions">
@@ -507,13 +524,30 @@
           <select id="mForm"></select>
         </div>
         <div>
-          <label>1日の消費量<span class="req">＊</span></label>
-          <input type="number" id="mPerDay" inputmode="decimal" step="any" min="0" placeholder="1">
+          <label>1回の量<span class="req">＊</span></label>
+          <input type="number" id="mDose" inputmode="decimal" step="any" min="0" placeholder="1">
         </div>
         <div>
           <label>単位</label>
           <input type="text" id="mUnit" list="dlUnit2" placeholder="錠" autocomplete="off">
           <datalist id="dlUnit2"></datalist>
+        </div>
+        <div>
+          <label>飲みかた</label>
+          <select id="mSched">
+          <option value="daily">毎日</option>
+          <option value="interval">◯日ごと</option>
+          <option value="weekly">週◯回</option>
+          <option value="prn">頓服（必要なときだけ）</option>
+          </select>
+        </div>
+        <div id="mWrapEvery" class="hidden">
+          <label>何日ごと</label>
+          <input type="number" id="mEvery" inputmode="numeric" min="1" step="1" placeholder="2">
+        </div>
+        <div id="mWrapTimes" class="hidden">
+          <label>週に何回</label>
+          <input type="number" id="mTimes" inputmode="numeric" min="1" step="1" placeholder="1">
         </div>
         <div>
           <label>いつもの入手先</label>
@@ -535,6 +569,7 @@
           <textarea id="mMemo" placeholder="朝食後1錠／飲み合わせ注意 など"></textarea>
         </div>
       </div>
+      <div class="hint" id="mDoseHint"></div>
       <fieldset class="sub hidden" id="newPlaceBox2">
         <legend>新しい入手先</legend>
         <div class="split">
@@ -744,6 +779,60 @@ const UNITS = ['錠','カプセル','包','mL','g','枚','本','回','個'];
 
 const KIND_LABEL = { rx: '処方', otc: '購入', adjust: '棚卸' };
 
+// 飲みかた。残量の計算はどれも「1日あたりいくつ減るか」に均してから行う。
+const SCHEDS = ['daily', 'interval', 'weekly', 'prn'];
+
+function perDayOf(sched, dose, every, times) {
+  if (sched === 'prn' || !(dose > 0)) return 0;
+  if (sched === 'interval') return dose / Math.max(1, every);
+  if (sched === 'weekly') return dose * Math.max(1, times) / 7;
+  return dose;                       // daily
+}
+
+// フォームの飲みかた欄をひとまとめに扱う。pre は 'n'（記録タブ）か 'm'（薬タブ）。
+function schedFields(pre) {
+  return {
+    dose: numf($(pre + 'Dose').value),
+    sched: $(pre + 'Sched').value,
+    every: numf($(pre + 'Every').value) || 2,
+    times: numf($(pre + 'Times').value) || 1,
+    unit: $(pre + 'Unit').value
+  };
+}
+
+function syncSchedUI(pre) {
+  const v = $(pre + 'Sched').value;
+  $(pre + 'WrapEvery').classList.toggle('hidden', v !== 'interval');
+  $(pre + 'WrapTimes').classList.toggle('hidden', v !== 'weekly');
+  const f = schedFields(pre);
+  const pd = perDayOf(f.sched, f.dose, f.every, f.times);
+  const hint = $(pre + 'DoseHint');
+  if (hint) {
+    if (v === 'prn') {
+      hint.innerHTML = '必要なときだけ使う薬です。残量は数量の積み上げだけで管理し、切れる日は予測しません。';
+    } else if (!(pd > 0)) {
+      hint.innerHTML = '1回の量を入れてください。';
+    } else if (v === 'daily') {
+      hint.innerHTML = `1日あたり <b>${qty(f.dose)}${esc(f.unit || '')}</b> 減るものとして、残りと切れる日を計算します。`;
+    } else {
+      // 毎日でない薬は「1日あたり 0.1錠」より「1回分が何日もつか」のほうが読みやすい
+      const span = v === 'interval' ? f.every : 7 / Math.max(1, f.times);
+      hint.innerHTML = `1回分（<b>${qty(f.dose)}${esc(f.unit || '')}</b>）で <b>${qty(span)}日</b> もつものとして、`
+        + `残りと切れる日を計算します。`;
+    }
+  }
+  if (pre === 'n') updateCalcHint();
+}
+
+// 画面に出す飲みかたの文言
+function doseText(m) {
+  if (m.sched === 'prn' || !(m.perDay > 0)) return '頓服';
+  const d = qty(m.dose) + esc(m.unit);
+  if (m.sched === 'interval') return `${m.every}日ごとに ${d}`;
+  if (m.sched === 'weekly') return `週${m.times}回 ${d}`;
+  return `1日 ${d}`;
+}
+
 /* ============================================================
    ストレージ
    ============================================================ */
@@ -826,12 +915,24 @@ function save() {
 
 function normMed(m) {
   const form = FORM_NAMES.includes(m.form) ? m.form : '錠剤';
+
+  // 飲みかたを持たない古いデータは、1日の消費量から読み替える
+  let sched = SCHEDS.includes(m.sched) ? m.sched : null;
+  let dose = numf(m.dose);
+  if (!sched) {
+    sched = numf(m.perDay) > 0 ? 'daily' : 'prn';
+    dose = numf(m.perDay);
+  }
+  const every = Math.max(1, Math.round(numf(m.every)) || 2);
+  const times = Math.max(1, Math.round(numf(m.times)) || 1);
+
   return {
     id: m.id || uid(),
     name: String(m.name || '').trim(),
     form,
     unit: String(m.unit || '').trim() || FORM_UNIT[form],
-    perDay: numf(m.perDay),
+    sched, dose, every, times,
+    perDay: perDayOf(sched, dose, every, times),
     place: String(m.place || '').trim(),
     warnDays: m.warnDays === '' || m.warnDays == null ? null : Math.max(0, Math.round(numf(m.warnDays))),
     active: m.active === undefined ? true : !!m.active,
@@ -1066,7 +1167,7 @@ function cardHtml({ m, st }) {
   return `<div class="d s-${stt.tone} ${m.active ? '' : 'ended'}">
     <div class="d-main">
       <div class="d-name">${esc(m.name)}</div>
-      <div class="d-sub">${m.perDay > 0 ? `1日 ${qty(m.perDay)}${esc(m.unit)}` : '頓服'}${m.memo ? '・' + esc(m.memo) : ''}</div>
+      <div class="d-sub">${doseText(m)}${m.memo ? '・' + esc(m.memo) : ''}</div>
       <div class="d-meta">
         ${last ? `<span>直近 ${jdate(last.date)}${last.amount ? ' ' + yen(last.amount) + '円' : ''}${last.place ? ' / ' + esc(last.place) : ''}</span>` : ''}
         ${count ? `<span>累計 ${count}回 ${yen(total)}円</span>` : ''}
@@ -1204,7 +1305,9 @@ function initEntry() {
     if (adj) { $('fDays').value = ''; $('fAmount').value = ''; }
     updateCalcHint();
   };
-  ['fQty', 'fDays', 'nPerDay', 'nUnit'].forEach(id => $(id).oninput = updateCalcHint);
+  ['fQty', 'fDays'].forEach(id => $(id).oninput = updateCalcHint);
+  ['nDose', 'nEvery', 'nTimes', 'nUnit'].forEach(id => $(id).oninput = () => syncSchedUI('n'));
+  $('nSched').onchange = () => syncSchedUI('n');
   $('fDate').onchange = updateCalcHint;
 
   $('btnSave').onclick = saveBuy;
@@ -1249,7 +1352,9 @@ function openEntry(buyId, medId) {
     ENTRY_TAGS = [];
     $('btnDelete').classList.add('hidden');
   }
-  ['nName', 'nPerDay', 'pName', 'tName'].forEach(id => $(id).value = '');
+  ['nName', 'nDose', 'pName', 'tName'].forEach(id => $(id).value = '');
+  $('nSched').value = 'daily'; $('nEvery').value = ''; $('nTimes').value = '';
+  syncSchedUI('n');
   $('newTagBox').classList.add('hidden');
   renderTagPick();
   $('fMed').onchange();
@@ -1264,7 +1369,8 @@ function updateCalcHint() {
   const m = medById($('fMed').value);
   const q = numf($('fQty').value);
   const d = $('fDays').value === '' ? null : numf($('fDays').value);
-  const perDay = m ? m.perDay : numf($('nPerDay').value);
+  const nf = schedFields('n');
+  const perDay = m ? m.perDay : perDayOf(nf.sched, nf.dose, nf.every, nf.times);
   const unit = m ? m.unit : ($('nUnit').value || '');
 
   if (kind === 'adjust') {
@@ -1300,11 +1406,13 @@ function saveBuy() {
   if (medId === NEW_MED) {
     const name = $('nName').value.trim();
     if (!name) return msg(el, '新しい薬の名前を入れてください。', 'err');
-    if ($('nPerDay').value === '') return msg(el, '1日の消費量を入れてください（頓服なら 0）。', 'err');
+    const f = schedFields('n');
+    if (f.sched !== 'prn' && !(f.dose > 0)) return msg(el, '1回の量を入れてください。', 'err');
     const form = $('nForm').value;
     const m = normMed({
       name, form,
-      unit: $('nUnit').value || FORM_UNIT[form], perDay: $('nPerDay').value,
+      unit: $('nUnit').value || FORM_UNIT[form],
+      dose: f.dose, sched: f.sched, every: f.every, times: f.times,
       place, active: true
     });
     S.meds.push(m);
@@ -1348,7 +1456,9 @@ function saveBuy() {
 
 function initMeds() {
   $('mForm').innerHTML = FORM_NAMES.map(f => `<option>${f}</option>`).join('');
-  $('mForm').onchange = () => { if (!EDIT_MED || !$('mUnit').value) $('mUnit').value = FORM_UNIT[$('mForm').value]; };
+  $('mForm').onchange = () => { if (!EDIT_MED || !$('mUnit').value) $('mUnit').value = FORM_UNIT[$('mForm').value]; syncSchedUI('m'); };
+  ['mDose', 'mEvery', 'mTimes', 'mUnit'].forEach(id => $(id).oninput = () => syncSchedUI('m'));
+  $('mSched').onchange = () => syncSchedUI('m');
   $('mPlace').onchange = () => {
     $('newPlaceBox2').classList.toggle('hidden', $('mPlace').value !== NEW_PLACE);
     if ($('mPlace').value === NEW_PLACE) $('pName2').focus();
@@ -1376,7 +1486,10 @@ function openMed(id) {
     $('medTitle').textContent = '薬を編集する';
     $('mName').value = m.name;
     $('mForm').value = m.form;
-    $('mPerDay').value = m.perDay;
+    $('mDose').value = m.sched === 'prn' ? '' : m.dose;
+    $('mSched').value = m.sched;
+    $('mEvery').value = m.sched === 'interval' ? m.every : '';
+    $('mTimes').value = m.sched === 'weekly' ? m.times : '';
     $('mUnit').value = m.unit;
     fillPlaceSelect($('mPlace'), m.place, true);
     $('mWarn').value = m.warnDays == null ? '' : m.warnDays;
@@ -1385,7 +1498,8 @@ function openMed(id) {
     $('btnMedDelete').classList.remove('hidden');
   } else {
     $('medTitle').textContent = '薬を登録する';
-    ['mName', 'mPerDay', 'mWarn', 'mMemo'].forEach(k => $(k).value = '');
+    ['mName', 'mDose', 'mEvery', 'mTimes', 'mWarn', 'mMemo'].forEach(k => $(k).value = '');
+    $('mSched').value = 'daily';
     fillPlaceSelect($('mPlace'), '', true);
     $('mForm').value = '錠剤';
     $('mUnit').value = '錠';
@@ -1393,6 +1507,7 @@ function openMed(id) {
     $('btnMedDelete').classList.add('hidden');
   }
   $('pName2').value = '';
+  syncSchedUI('m');
   $('mPlace').onchange();
   msg($('medMsg'), '', 'info');
   renderMedTable();
@@ -1403,7 +1518,8 @@ function openMed(id) {
 function saveMed() {
   const el = $('medMsg');
   if (!$('mName').value.trim()) return msg(el, '薬の名前を入れてください。', 'err');
-  if ($('mPerDay').value === '') return msg(el, '1日の消費量を入れてください（頓服なら 0）。', 'err');
+  const f = schedFields('m');
+  if (f.sched !== 'prn' && !(f.dose > 0)) return msg(el, '1回の量を入れてください。', 'err');
 
   let place = $('mPlace').value;
   if (place === NEW_PLACE) {
@@ -1415,7 +1531,8 @@ function saveMed() {
   const m = normMed({
     id: EDIT_MED || undefined,
     name: $('mName').value,
-    form: $('mForm').value, unit: $('mUnit').value, perDay: $('mPerDay').value,
+    form: $('mForm').value, unit: $('mUnit').value,
+    dose: f.dose, sched: f.sched, every: f.every, times: f.times,
     place, warnDays: $('mWarn').value === '' ? null : $('mWarn').value,
     active: $('mActive').value === '1', memo: $('mMemo').value
   });
@@ -1436,7 +1553,7 @@ function renderMedTable() {
 
   $('medTable').innerHTML = `
     <thead><tr>
-      <th>薬</th><th class="n">1日</th><th class="n">残り</th>
+      <th>薬</th><th>飲みかた</th><th class="n">残り</th>
       <th>切れる日</th><th class="n">通知</th><th>状態</th><th></th>
     </tr></thead>
     <tbody>${list.map(m => {
@@ -1445,7 +1562,7 @@ function renderMedTable() {
       const ro = st.runOut ? jdateY(st.runOut) : '—';
       return `<tr>
         <td class="wrap-c">${esc(m.name)}</td>
-        <td class="n">${m.perDay > 0 ? qty(m.perDay) + esc(m.unit) : '頓服'}</td>
+        <td>${doseText(m)}</td>
         <td class="n">${rest}</td>
         <td class="n">${ro}</td>
         <td class="n">${warnOf(m)}日</td>
