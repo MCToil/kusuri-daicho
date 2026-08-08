@@ -771,11 +771,12 @@ const FORMS = [
   ['点眼・点鼻',  '本'],
   ['塗り薬',      'g'],
   ['吸入',        '回'],
+  ['皮下注射',    '本'],
   ['その他',      '個']
 ];
 const FORM_NAMES = FORMS.map(f => f[0]);
 const FORM_UNIT = Object.fromEntries(FORMS);
-const UNITS = ['錠','カプセル','包','mL','g','枚','本','回','個'];
+const UNITS = ['錠','カプセル','包','mL','g','枚','本','回','個','キット','筒'];
 
 const KIND_LABEL = { rx: '処方', otc: '購入', adjust: '棚卸' };
 
