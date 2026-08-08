@@ -2322,7 +2322,8 @@ function renderLostBar() {
   $('lostNew').onclick = () => {
     if (!confirm('この端末の記録を空のまま始めます。読み出せていないだけの記録があった場合、それは失われます。よろしいですか？')) return;
     try { localStorage.removeItem(SEEN_KEY); } catch (e) { /* 消せなくても続行 */ }
-    LOST = false; HOLD = false;
+    // 読み出し失敗の印も一緒に落とす。残すと案内が消えず、同期の送信も止まったままになる
+    LOST = false; HOLD = false; LOAD_FAILED = false;
     renderLostBar();
     toast('新しく始めます。');
   };
