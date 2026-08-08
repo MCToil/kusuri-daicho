@@ -282,6 +282,7 @@
   /* ---- 同期 ---- */
   #syncBtn.need { color: var(--gold); border-color: var(--gold); }
   #syncBtn.busy { color: var(--accent); border-color: var(--accent); }
+  #syncBtn.err  { color: var(--alert); border-color: var(--alert); }
 
   .syncline {
     display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
@@ -291,6 +292,8 @@
   .syncline.on   .dot { background: var(--ok); }
   .syncline.need .dot { background: var(--gold); }
   .syncline.busy .dot { background: var(--accent); }
+  .syncline.err  .dot { background: var(--alert); }
+  .syncline.err  { color: var(--alert); }
 
   .steps { margin: 12px 0 0 0; padding-left: 1.4em; font-size: 12.5px; line-height: 1.95; color: var(--ink-dim); }
   .steps code { font-family: var(--font-num); font-size: 11.5px; background: var(--rule-soft); padding: 1px 5px; }
@@ -1920,6 +1923,8 @@ let SY = loadSync();
 let syncing = false;
 let syncTimer = null;
 let lastAutoSync = 0;
+let SYNC_ERR = '';        // 直近の同期エラー（自動同期では画面に出すだけ）
+let NEEDS_CHOICE = false; // 選んでもらう必要がある（自動同期では聞かない）
 
 function toast(text) {
   const t = $('toast');
@@ -1940,15 +1945,17 @@ function setSyncStatus(text, cls) {
   $('syncStatus').textContent = text;
   $('syncLine').className = 'syncline ' + (cls || '');
   const b = $('syncBtn');
-  b.className = 'btn mini' + (cls === 'need' ? ' need' : cls === 'busy' ? ' busy' : '');
+  b.className = 'btn mini' + (cls === 'need' ? ' need' : cls === 'busy' ? ' busy' : cls === 'err' ? ' err' : '');
   b.title = text;
 }
 
 function idleStatus() {
-  if (!SY.token) setSyncStatus('同期は未設定です。', '');
-  else if (S.updatedAt && S.updatedAt !== SY.lastSyncedAt)
-    setSyncStatus(`未同期の変更があります（最終同期 ${fmtStamp(SY.lastSyncAt)}）`, 'need');
-  else setSyncStatus(`同期済み ${fmtStamp(SY.lastSyncAt)}`, 'on');
+  if (!SY.token) return setSyncStatus('同期は未設定です。', '');
+  if (SYNC_ERR) return setSyncStatus(SYNC_ERR, 'err');
+  if (NEEDS_CHOICE) return setSyncStatus('内容が食い違っています。「今すぐ同期」を押すと、どちらを残すか選べます。', 'need');
+  if (S.updatedAt && S.updatedAt !== SY.lastSyncedAt)
+    return setSyncStatus(`未同期の変更があります（最終同期 ${fmtStamp(SY.lastSyncAt)}）`, 'need');
+  setSyncStatus(`同期済み ${fmtStamp(SY.lastSyncAt)}`, 'on');
 }
 
 function ghHeaders() {
@@ -2113,25 +2120,39 @@ function runSync(manual) {
     if (!localChanged && !remoteChanged) return '最新です';
 
     // 全消去のあとなど、手元を空にしたうえで送る場合は確認する。
-    if (localEmpty && remoteHas) return askConflict(remote, 'empty');
+    if (localEmpty && remoteHas) return needsChoice(remote, 'empty', manual);
     // 取り込むと手元の記録が減る場合も、黙って適用しない。
     if (remote.buys.length < S.buys.length || remote.meds.length < S.meds.length)
-      return askConflict(remote, 'clip');
+      return needsChoice(remote, 'clip', manual);
 
     if (!localChanged) return applyRemote(remote);
     if (!remoteChanged) return pushRemote();
-    return askConflict(remote, 'conflict');
+    return needsChoice(remote, 'conflict', manual);
   }).then(m => {
     syncing = false;
+    SYNC_ERR = '';
+    if (m !== null) NEEDS_CHOICE = false;   // 選ぶ必要が無くなった
     if (m && manual) toast(m);
     idleStatus();
   }).catch(err => {
     syncing = false;
-    idleStatus();
     let m = err && err.message ? err.message : '同期に失敗しました。';
     if (err && err.name === 'TypeError') m = 'ネットワークに接続できませんでした。';
-    toast(m);
+    SYNC_ERR = m;
+    idleStatus();
+    // 自動同期では出さない。保存のたびに同じものが出てしまうため。
+    // 状態欄と右上の ⟳ の色で分かるようにしてある。
+    if (manual) toast(m);
   });
+}
+
+// 自動同期は保存のたびに走る。そこで確認ダイアログやエラーを出しては、
+// 追加するたびに邪魔になる。判断が要ることは覚えておいて画面に出すだけにし、
+// 本人が「今すぐ同期」を押したときに聞く。
+function needsChoice(remote, mode, manual) {
+  if (manual) return askConflict(remote, mode);
+  NEEDS_CHOICE = true;
+  return null;
 }
 
 // 食い違うときは、消えるほうを見せてから選んでもらう。
@@ -2342,6 +2363,7 @@ function initSync() {
   $('syncSave').onclick = () => {
     const t = $('syncToken').value.trim();
     if (!t) { msg($('syncMsg'), 'トークンを貼り付けてください。', 'err'); $('syncToken').focus(); return; }
+    SYNC_ERR = ''; NEEDS_CHOICE = false;   // 設定を入れ直したので、覚えている失敗は忘れる
     SY.token = t;
     const g = $('syncGist').value.trim();
     if (g !== SY.gistId) { SY.gistId = g; SY.lastSyncedAt = ''; }  // 保存先が変わったので判定をやり直す
