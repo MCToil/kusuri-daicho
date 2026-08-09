@@ -342,12 +342,10 @@
   .items { display: flex; flex-direction: column; gap: 1px; background: var(--rule-soft); }
   .item-row {
     background: var(--card); padding: 8px 10px; display: grid;
-    grid-template-columns: 1fr 92px auto; gap: 8px; align-items: center;
+    grid-template-columns: 1fr auto; gap: 8px; align-items: center;
   }
   .item-row .nm { font-size: 13px; overflow-wrap: anywhere; }
-  .item-row.direct { grid-template-columns: 1fr 92px auto; }
   .item-row input[type=text] { width: 100%; text-align: left; }
-  .item-row .u input[type=text] { width: 62px; display: inline-block; }
   .item-row input { width: 100%; text-align: right; }
   .item-row .u { font-size: 11.5px; color: var(--ink-dim); }
   .item-empty { background: var(--card); padding: 12px; font-size: 12.5px; color: var(--ink-dim); text-align: center; }
@@ -478,11 +476,7 @@
         <div class="hint">保存すると入手先として登録され、次からはプルダウンで選べます。</div>
       </fieldset>
 
-      <fieldset class="sub hidden" id="setItemsBox">
-        <legend>内訳（このセットでもらった数量）</legend>
-        <div id="fItems"></div>
-        <div class="hint" id="setDaysHint"></div>
-      </fieldset>
+      <div class="hint hidden" id="setDaysHint"></div>
 
       <fieldset class="sub hidden" id="newMedBox">
         <legend>新しい薬</legend>
@@ -655,9 +649,8 @@
           <button type="button" class="btn" id="btnItemAdd">登録済みから入れる</button>
           <button type="button" class="btn" id="btnItemDirect">＋ 名前を直接入れる</button>
         </div>
-        <datalist id="dlUnit3"></datalist>
-        <div class="hint">1回の処方でもらう数量を入れておくと、記録するときに初期値として出ます。
-          日数はセット全体で管理するので、薬ごとの残量は出しません。<br>
+        <div class="hint"><b>入れるのは薬の名前だけです。</b>何日分もらったかは、記録するときにセット全体でひとつ入れます。
+          薬ごとの数量や日数は持ちません。<br>
           <b>名前を直接入れた薬は、薬としては登録されません。</b>このセットの中だけに残るので、
           一覧にも「薬」タブにも出てきません。一覧にはセットとして1枚だけ出ます。</div>
       </fieldset>
@@ -1047,21 +1040,22 @@ function normSet(x) {
 
 // 内訳の1行。登録済みの薬を指すか（medId）、セットの中だけの薬か（name）。
 // 直接入力したものは薬として登録しないので、一覧にも薬タブにも出てこない。
+// 数や日数は持たない。何日分もらったかはセット全体でひとつだけ入れる。
 function normItems(a) {
   if (!Array.isArray(a)) return [];
   return a.map(i => {
     if (!i) return null;
     const medId = String(i.medId || '');
-    if (medId) return { medId, name: '', unit: '', qty: numf(i.qty) };
+    if (medId) return { medId, name: '' };
     const name = String(i.name || '').trim();
     if (!name) return null;
-    return { medId: '', name, unit: String(i.unit || '').trim(), qty: numf(i.qty) };
+    return { medId: '', name };
   }).filter(Boolean);
 }
 
-// 内訳の表示名と単位。登録済みの薬なら薬側を、直接入力ならその行の値を使う。
+// 内訳の表示名。登録済みの薬なら薬側の名前を、直接入力ならその行の名前を使う。
 const itemName = i => i.medId ? medName(i.medId) : (i.name || '（名前なし）');
-const itemUnit = i => i.medId ? ((medById(i.medId) || {}).unit || '') : (i.unit || '');
+const itemsText = items => items.map(itemName).join('・');
 
 function normBuy(b) {
   return {
@@ -1332,7 +1326,7 @@ function cardHtml({ set, u, st }) {
     : `${doseText(u)}${u.memo ? '・' + esc(u.memo) : ''}`;
 
   const items = set && u.items.length
-    ? `<div class="d-items">${u.items.map(i => esc(itemName(i)) + (i.qty ? ` ${qty(i.qty)}${esc(itemUnit(i))}` : '')).join('　')}</div>`
+    ? `<div class="d-items">${u.items.map(i => esc(itemName(i))).join('　')}</div>`
     : '';
 
   return `<div class="d s-${stt.tone} ${u.active ? '' : 'ended'}">
@@ -1466,45 +1460,18 @@ function fillUnitSelect(sel, opts) {
 const isSetVal = v => String(v || '').startsWith('set:');
 const setIdOf = v => String(v || '').slice(4);
 
-let ENTRY_ITEMS = [];   // 記録中のセット内訳 [{medId, qty}]
-
-function renderEntryItems() {
-  const el = $('fItems');
-  if (!ENTRY_ITEMS.length) {
-    el.innerHTML = `<div class="items"><div class="item-empty">このセットには薬が入っていません。「セット」タブで中身を登録してください。</div></div>`;
-    updateSetDaysHint();
-    return;
-  }
-  el.innerHTML = `<div class="items">${ENTRY_ITEMS.map((i, n) => `<div class="item-row">
-      <span class="nm">${esc(itemName(i))}</span>
-      <input type="number" inputmode="decimal" step="any" min="0" data-eq="${n}" value="${i.qty || ''}" placeholder="0">
-      <span class="u">${esc(itemUnit(i))}</span>
-    </div>`).join('')}</div>`;
-  el.querySelectorAll('[data-eq]').forEach(inp => inp.oninput = () => {
-    ENTRY_ITEMS[+inp.dataset.eq].qty = numf(inp.value);
-    updateSetDaysHint();
-  });
-  updateSetDaysHint();
-}
-
-// 内訳から「何日分か」を見積もる。いちばん早く尽きる薬でセット全体が切れる。
-function daysFromItems() {
-  // 直接入力の薬は1日量を持たないので、見積もりには使わない
-  const cand = ENTRY_ITEMS.map(i => {
-    const m = i.medId ? medById(i.medId) : null;
-    return m && m.perDay > 0 && i.qty > 0 ? i.qty / m.perDay : null;
-  }).filter(v => v != null);
-  return cand.length ? Math.min(...cand) : null;
-}
-
+// セットを選んだときに、中身と日数の扱いを示す。入力するのは日数分ひとつだけ。
 function updateSetDaysHint() {
-  const d = daysFromItems();
-  const cur = numf($('fDays').value);
-  $('setDaysHint').innerHTML = d == null
-    ? '日数分を入れてください。セットの残りはこの日数で数えます。'
-    : `内訳から計算すると <b>${qty(d)}日分</b> です`
-      + (cur > 0 && Math.abs(cur - d) > 0.5 ? `（いま入っているのは ${qty(cur)}日分）` : '')
-      + '。実際にもらった日数と違うときは、日数分の欄を書き換えてください。';
+  const v = $('fMed').value;
+  const box = $('setDaysHint');
+  if (!isSetVal(v)) { box.classList.add('hidden'); return; }
+  const x = setById(setIdOf(v));
+  box.classList.remove('hidden');
+  box.innerHTML = x && x.items.length
+    ? `このセットの中身：<b>${esc(itemsText(x.items))}</b><br>`
+      + `入れるのは<b>セット全体で何日分もらったか</b>だけです。薬ごとの数量や日数は要りません。`
+    : `このセットにはまだ薬が入っていません。「セット」タブで中身を登録できます。<br>`
+      + `入れるのは<b>セット全体で何日分もらったか</b>だけです。`;
 }
 
 function initEntry() {
@@ -1516,7 +1483,6 @@ function initEntry() {
     const isNew = v === NEW_MED;
     const isSet = isSetVal(v);
     $('newMedBox').classList.toggle('hidden', !isNew);
-    $('setItemsBox').classList.toggle('hidden', !isSet);
     // セットは日数で管理するので、数量ではなく日数分を必須にする
     $('wrapQty').classList.toggle('hidden', isSet);
     $('lbDays').innerHTML = isSet ? '日数分<span class="req">＊</span>' : '日数分（空欄なら数量から計算）';
@@ -1524,14 +1490,10 @@ function initEntry() {
 
     if (isSet) {
       const x = setById(setIdOf(v));
-      if (x) {
-        if (!ENTRY_ITEMS.length || !EDIT_BUY) ENTRY_ITEMS = x.items.map(i => Object.assign({}, i));
-        if (!$('fPlace').value) fillPlaceSelect($('fPlace'), x.place, true);
-        renderEntryItems();
-        if (!$('fDays').value) { const d = daysFromItems(); if (d) $('fDays').value = Math.round(d * 10) / 10; }
-        updateSetDaysHint();
-      }
+      if (x && !$('fPlace').value) fillPlaceSelect($('fPlace'), x.place, true);
+      updateSetDaysHint();
     } else {
+      $('setDaysHint').classList.add('hidden');
       const m = medById(v);
       if (m && !$('fPlace').value) fillPlaceSelect($('fPlace'), m.place, true);
     }
@@ -1562,12 +1524,11 @@ function initEntry() {
       : '日数分（空欄なら数量から計算）';
     $('wrapDays').classList.toggle('hidden', adj && !isSet);
     $('wrapAmount').classList.toggle('hidden', adj);
-    $('setItemsBox').classList.toggle('hidden', !isSet || adj);
     if (adj) { $('fAmount').value = ''; if (!isSet) $('fDays').value = ''; }
     updateCalcHint();
   };
   $('fQty').oninput = updateCalcHint;
-  $('fDays').oninput = () => { updateCalcHint(); if (isSetVal($('fMed').value)) updateSetDaysHint(); };
+  $('fDays').oninput = updateCalcHint;
   ['nDose', 'nEvery', 'nTimes', 'nUnit'].forEach(id => $(id).oninput = () => syncSchedUI('n'));
   $('nSched').onchange = () => syncSchedUI('n');
   $('fDate').onchange = updateCalcHint;
@@ -1600,7 +1561,6 @@ function openEntry(buyId, unitId) {
     $('fAmount').value = b.amount || '';
     fillPlaceSelect($('fPlace'), b.place, true);
     ENTRY_TAGS = b.tags.slice();
-    ENTRY_ITEMS = b.items.map(i => Object.assign({}, i));
     $('fMemo').value = b.memo;
     $('btnDelete').classList.remove('hidden');
   } else {
@@ -1611,7 +1571,6 @@ function openEntry(buyId, unitId) {
     $('fKind').value = 'rx';
     ['fQty', 'fDays', 'fAmount', 'fMemo'].forEach(id => $(id).value = '');
     ENTRY_TAGS = [];
-    ENTRY_ITEMS = [];
     const m = medById($('fMed').value);
     fillPlaceSelect($('fPlace'), m ? m.place : '', true);
     $('btnDelete').classList.add('hidden');
@@ -1701,7 +1660,8 @@ function saveBuy() {
     id: EDIT_BUY || undefined,
     medId: isSet ? '' : val,
     setId: isSet ? setIdOf(val) : '',
-    items: isSet && !adj ? ENTRY_ITEMS.filter(i => i.qty > 0) : [],
+    // そのときのセットの中身を控えておく。あとで中身を変えても記録は当時のまま残る。
+    items: isSet && !adj ? (setById(setIdOf(val)) || { items: [] }).items : [],
     date: $('fDate').value,
     kind: $('fKind').value,
     qty: isSet ? 0 : $('fQty').value,
@@ -1870,12 +1830,12 @@ function initSets() {
     const id = $('xAddMed').value;
     if (!id) return msg($('setMsg'), '登録済みの薬がありません。「＋ 名前を直接入れる」を使ってください。', 'err');
     if (SET_ITEMS.some(i => i.medId === id)) return msg($('setMsg'), 'その薬はもう入っています。', 'err');
-    SET_ITEMS.push({ medId: id, name: '', unit: '', qty: 0 });
+    SET_ITEMS.push({ medId: id, name: '' });
     renderSetItems();
     msg($('setMsg'), '', 'info');
   };
   $('btnItemDirect').onclick = () => {
-    SET_ITEMS.push({ medId: '', name: '', unit: '', qty: 0 });
+    SET_ITEMS.push({ medId: '', name: '' });
     renderSetItems();
     const last = $('xItems').querySelector('.item-row.direct:last-child [data-nm]');
     if (last) last.focus();
@@ -1904,19 +1864,14 @@ function renderSetItems() {
   el.innerHTML = `<div class="items">${SET_ITEMS.map((i, n) => i.medId
     ? `<div class="item-row">
         <span class="nm">${esc(medName(i.medId))}</span>
-        <input type="number" inputmode="decimal" step="any" min="0" data-q="${n}" value="${i.qty || ''}" placeholder="0">
-        <span class="u">${esc(itemUnit(i))} <button class="chip" data-rm="${n}">外す</button></span>
+        <span class="u"><button class="chip" data-rm="${n}">外す</button></span>
       </div>`
     : `<div class="item-row direct">
         <input type="text" data-nm="${n}" value="${esc(i.name)}" placeholder="薬の名前" autocomplete="off">
-        <input type="number" inputmode="decimal" step="any" min="0" data-q="${n}" value="${i.qty || ''}" placeholder="0">
-        <span class="u"><input type="text" data-un="${n}" value="${esc(i.unit)}" list="dlUnit3" placeholder="錠" autocomplete="off">
-          <button class="chip" data-rm="${n}">外す</button></span>
+        <span class="u"><button class="chip" data-rm="${n}">外す</button></span>
       </div>`).join('')}</div>`;
 
-  el.querySelectorAll('[data-q]').forEach(inp => inp.oninput = () => { SET_ITEMS[+inp.dataset.q].qty = numf(inp.value); });
   el.querySelectorAll('[data-nm]').forEach(inp => inp.oninput = () => { SET_ITEMS[+inp.dataset.nm].name = inp.value; });
-  el.querySelectorAll('[data-un]').forEach(inp => inp.oninput = () => { SET_ITEMS[+inp.dataset.un].unit = inp.value; });
   el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { SET_ITEMS.splice(+b.dataset.rm, 1); renderSetItems(); });
 }
 
@@ -1992,7 +1947,7 @@ function renderSetTable() {
       const st = stockSet(x);
       return `<tr>
         <td class="wrap-c">${esc(x.name)}</td>
-        <td class="wrap-c">${x.items.length ? x.items.map(i => esc(itemName(i)) + (i.qty ? ` ${qty(i.qty)}` : '')).join('、') : '—'}</td>
+        <td class="wrap-c">${x.items.length ? esc(itemsText(x.items)) : '—'}</td>
         <td class="n">${st.days == null ? '—' : Math.max(0, Math.floor(st.days)) + '日'}</td>
         <td class="n">${st.runOut ? jdateY(st.runOut) : '—'}</td>
         <td class="n">${warnOf(x)}日</td>
@@ -2054,7 +2009,7 @@ function renderHist() {
         : (b.kind === 'adjust' ? '—' : (() => { const v = supplyDays(m, b); return v > 0 ? qty(v) + '日' : '—'; })());
       const qtyCell = b.setId
         ? (b.items.length
-            ? `<span class="tags-cell">${b.items.map(i => `<span class="chip tag">${esc(itemName(i))} ${qty(i.qty)}</span>`).join('')}</span>`
+            ? `<span class="tags-cell">${b.items.map(i => `<span class="chip tag">${esc(itemName(i))}</span>`).join('')}</span>`
             : '—')
         : qty(b.qty) + esc(m.unit);
       return `<tr>
@@ -2273,7 +2228,7 @@ function initSettings() {
       const m = b.setId ? null : (medById(b.medId) || { name: '（削除済み）', unit: '', perDay: 0 });
       const d = b.setId ? (b.days || '') : (b.kind === 'adjust' ? '' : supplyDays(m, b));
       const breakdown = b.setId
-        ? b.items.map(i => `${itemName(i)} ${qty(i.qty)}${itemUnit(i)}`).join('・')
+        ? itemsText(b.items)
         : '';
       return [b.date, b.setId ? (x ? x.name : '（削除済みのセット）') : m.name, KIND_LABEL[b.kind],
               b.setId ? '' : b.qty, b.setId ? '' : m.unit, breakdown,
@@ -2884,10 +2839,9 @@ function initSync() {
    ============================================================ */
 
 function refreshDatalists() {
-  const setUnits = S.sets.flatMap(x => x.items.map(i => i.unit)).filter(Boolean);
-  const units = [...new Set([...UNITS, ...S.meds.map(m => m.unit).filter(Boolean), ...setUnits])];
+  const units = [...new Set([...UNITS, ...S.meds.map(m => m.unit).filter(Boolean)])];
   const opt = a => a.map(v => `<option value="${esc(v)}">`).join('');
-  ['dlUnit', 'dlUnit2', 'dlUnit3'].forEach(id => $(id).innerHTML = opt(units));
+  ['dlUnit', 'dlUnit2'].forEach(id => $(id).innerHTML = opt(units));
 }
 
 /* ============================================================
