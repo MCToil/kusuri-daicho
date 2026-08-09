@@ -338,6 +338,18 @@
   }
   #toast.on { opacity: .95; }
 
+  /* セットの内訳 */
+  .items { display: flex; flex-direction: column; gap: 1px; background: var(--rule-soft); }
+  .item-row {
+    background: var(--card); padding: 8px 10px; display: grid;
+    grid-template-columns: 1fr 92px auto; gap: 8px; align-items: center;
+  }
+  .item-row .nm { font-size: 13px; overflow-wrap: anywhere; }
+  .item-row input { width: 100%; text-align: right; }
+  .item-row .u { font-size: 11.5px; color: var(--ink-dim); }
+  .item-empty { background: var(--card); padding: 12px; font-size: 12.5px; color: var(--ink-dim); text-align: center; }
+  .d-items { grid-column: 1/-1; font-size: 11.5px; color: var(--ink-dim); margin-top: 4px; overflow-wrap: anywhere; }
+
   .tagpick { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 3px; }
   .tagpick .chip { cursor: pointer; }
   .tagpick .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
@@ -379,6 +391,7 @@
     <button class="tab active" data-tab="list">一覧</button>
     <button class="tab" data-tab="entry">記録</button>
     <button class="tab" data-tab="meds">薬</button>
+    <button class="tab" data-tab="sets">セット</button>
     <button class="tab" data-tab="hist">履歴</button>
     <button class="tab" data-tab="stats">集計</button>
     <button class="tab" data-tab="settings">設定</button>
@@ -423,12 +436,12 @@
             <option value="adjust">棚卸（残量を数え直す）</option>
           </select>
         </div>
-        <div>
+        <div id="wrapQty">
           <label id="lbQty">数量<span class="req">＊</span></label>
           <input type="number" id="fQty" inputmode="decimal" step="any" min="0" placeholder="56">
         </div>
         <div id="wrapDays">
-          <label>日数分（空欄なら数量から計算）</label>
+          <label id="lbDays">日数分（空欄なら数量から計算）</label>
           <input type="number" id="fDays" inputmode="numeric" step="any" min="0" placeholder="28">
         </div>
         <div id="wrapAmount">
@@ -460,6 +473,12 @@
           <input type="text" id="pName" class="grow" placeholder="みどり内科" autocomplete="off">
         </div>
         <div class="hint">保存すると入手先として登録され、次からはプルダウンで選べます。</div>
+      </fieldset>
+
+      <fieldset class="sub hidden" id="setItemsBox">
+        <legend>内訳（このセットでもらった数量）</legend>
+        <div id="fItems"></div>
+        <div class="hint" id="setDaysHint"></div>
       </fieldset>
 
       <fieldset class="sub hidden" id="newMedBox">
@@ -595,6 +614,66 @@
     </div>
   </section>
 
+  <!-- ============ セット ============ -->
+  <section id="tab-sets" class="hidden">
+    <div class="card f">
+      <div class="card-title" id="setTitle">セットを登録する</div>
+      <div class="grid">
+        <div style="grid-column:1/-1">
+          <label>セットの名前<span class="req">＊</span></label>
+          <input type="text" id="xName" placeholder="みどり内科 定期処方" autocomplete="off">
+        </div>
+        <div>
+          <label>いつもの入手先</label>
+          <select id="xPlace"></select>
+        </div>
+        <div>
+          <label>補充アラート（空欄なら既定）</label>
+          <input type="number" id="xWarn" inputmode="numeric" min="0" placeholder="14">
+        </div>
+        <div>
+          <label>状態</label>
+          <select id="xActive">
+            <option value="1">継続中</option>
+            <option value="0">終了</option>
+          </select>
+        </div>
+        <div style="grid-column:1/-1">
+          <label>メモ</label>
+          <textarea id="xMemo" placeholder="毎回2か月分／次回は血液検査 など"></textarea>
+        </div>
+      </div>
+
+      <fieldset class="sub" id="xItemsBox">
+        <legend>中身（毎回もらう薬）</legend>
+        <div id="xItems"></div>
+        <div class="split" style="margin-top:10px">
+          <select id="xAddMed" class="grow"></select>
+          <button type="button" class="btn" id="btnItemAdd">この薬を入れる</button>
+        </div>
+        <div class="hint">1回の処方でもらう数量を入れておくと、記録するときに初期値として出ます。
+          日数はセット全体で管理するので、薬ごとの残量は出しません。</div>
+      </fieldset>
+
+      <fieldset class="sub hidden" id="newPlaceBox3">
+        <legend>新しい入手先</legend>
+        <div class="split"><input type="text" id="pName3" class="grow" placeholder="みどり内科" autocomplete="off"></div>
+      </fieldset>
+
+      <div class="actions">
+        <button class="btn primary" id="btnSetSave">保存</button>
+        <button class="btn" id="btnSetClear">入力をクリア</button>
+        <button class="btn danger hidden" id="btnSetDelete">このセットを削除</button>
+      </div>
+      <div class="msg" id="setMsg"></div>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:16px 16px 6px"><div class="card-title" style="margin:0">登録済みのセット</div></div>
+      <div class="scroll-x"><table class="t" id="setTable"></table></div>
+    </div>
+  </section>
+
   <!-- ============ 履歴 ============ -->
   <section id="tab-hist" class="hidden">
     <div class="card">
@@ -631,7 +710,7 @@
     </div>
 
     <div class="card"><div class="card-title">月別</div><div id="byMonth"></div></div>
-    <div class="card"><div class="card-title">薬別</div><div id="byMed"></div></div>
+    <div class="card"><div class="card-title">薬・セット別</div><div id="byMed"></div></div>
     <div class="card"><div class="card-title">入手先別</div><div id="byPlace"></div></div>
     <div class="card" id="tagCard"><div class="card-title">タグ別</div><div id="byTag"></div>
       <div class="hint">1件に複数のタグが付いていると、その額はどのタグにも数えます。合計が年間の薬代を超えることがあります。</div></div>
@@ -846,6 +925,7 @@ function blank() {
     version: 1,
     updatedAt: '',
     meds: [],
+    sets: [],
     buys: [],
     places: [],
     tags: [],
@@ -878,6 +958,7 @@ function load() {
       version: 1,
       updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : '',
       meds: Array.isArray(o.meds) ? o.meds.map(normMed) : [],
+      sets: Array.isArray(o.sets) ? o.sets.map(normSet) : [],
       buys: Array.isArray(o.buys) ? o.buys.map(normBuy) : [],
       places: names(o.places),
       tags: names(o.tags),
@@ -907,7 +988,7 @@ function persist() {
   if (HOLD) return;
   try {
     localStorage.setItem(KEY, JSON.stringify(S));
-    if (S.meds.length || S.buys.length) localStorage.setItem(SEEN_KEY, S.updatedAt || new Date().toISOString());
+    if (S.meds.length || S.sets.length || S.buys.length) localStorage.setItem(SEEN_KEY, S.updatedAt || new Date().toISOString());
   } catch (e) { /* 保存できなくても操作は続けられる */ }
 }
 function save() {
@@ -943,10 +1024,31 @@ function normMed(m) {
     memo: String(m.memo || '')
   };
 }
+// セット：毎回まとめてもらう薬の組み合わせ。日数の管理はセット単位で行い、
+// 中身（どの薬が何個入っているか）は内訳として持つ。
+function normSet(x) {
+  return {
+    id: x.id || uid(),
+    name: String(x.name || '').trim(),
+    place: String(x.place || '').trim(),
+    warnDays: x.warnDays === '' || x.warnDays == null ? null : Math.max(0, Math.round(numf(x.warnDays))),
+    active: x.active === undefined ? true : !!x.active,
+    memo: String(x.memo || ''),
+    items: normItems(x.items)
+  };
+}
+
+function normItems(a) {
+  if (!Array.isArray(a)) return [];
+  return a.filter(i => i && i.medId).map(i => ({ medId: String(i.medId), qty: numf(i.qty) }));
+}
+
 function normBuy(b) {
   return {
     id: b.id || uid(),
     medId: b.medId || '',
+    setId: b.setId || '',
+    items: normItems(b.items),
     date: /^\d{4}-\d{2}-\d{2}$/.test(b.date || '') ? b.date : '',
     kind: ['rx', 'otc', 'adjust'].includes(b.kind) ? b.kind : 'rx',
     qty: numf(b.qty),
@@ -974,6 +1076,7 @@ function ensureMasters(d) {
     b.tags.forEach(t => { if (!d.tags.includes(t)) d.tags.push(t); });
   });
   d.meds.forEach(m => { if (m.place && !d.places.includes(m.place)) d.places.push(m.place); });
+  (d.sets || []).forEach(x => { if (x.place && !d.places.includes(x.place)) d.places.push(x.place); });
 }
 
 /* ============================================================
@@ -1006,9 +1109,15 @@ function jdateY(s) { return (s || '').slice(0, 4) + '年' + jdate(s); }
 function msg(el, text, cls) { el.className = 'msg ' + (cls || 'info'); el.innerHTML = text; }
 
 const medById = id => S.meds.find(m => m.id === id) || null;
+const setById = id => S.sets.find(x => x.id === id) || null;
+const medName = id => (medById(id) || {}).name || '（削除済みの薬）';
+
+// その薬が、いま動いているセットに入っているか。入っていれば日数はセットで見る。
+const inActiveSet = medId => S.sets.some(x => x.active && x.items.some(i => i.medId === medId));
 const warnOf = m => (m.warnDays == null ? S.settings.warnDays : m.warnDays);
-const buysOf = id => S.buys.filter(b => b.medId === id && b.date)
-  .sort((a, b) => a.date.localeCompare(b.date) || (a.kind === 'adjust' ? -1 : 1) - (b.kind === 'adjust' ? -1 : 1));
+const byDate = (a, b) => a.date.localeCompare(b.date) || (a.kind === 'adjust' ? -1 : 1) - (b.kind === 'adjust' ? -1 : 1);
+const buysOf = id => S.buys.filter(b => b.medId === id && !b.setId && b.date).sort(byDate);
+const setBuysOf = id => S.buys.filter(b => b.setId === id && b.date).sort(byDate);
 
 let TODAY = todayStr();
 let FILTER = 'all';      // 'all' | 'need' | 'out'
@@ -1037,13 +1146,7 @@ function stock(med) {
     return { asNeeded: true, rest: q, days: null, runOut: null, span: null };
   }
 
-  let end = null, span = null;
-  for (const b of list) {
-    const d = supplyDays(med, b);
-    const start = (b.kind === 'adjust' || end === null || end < dnum(b.date)) ? dnum(b.date) : end;
-    end = start + d;
-    span = d;
-  }
+  const { end, span } = chainEnd(list, b => supplyDays(med, b));
   const days = end - dnum(TODAY);
   return { rest: Math.max(0, days) * med.perDay, days, runOut: dstr(end), span };
 }
@@ -1051,6 +1154,29 @@ function stock(med) {
 function supplyDays(med, b) {
   if (b.days != null && b.days > 0) return b.days;
   return med.perDay > 0 ? b.qty / med.perDay : 0;
+}
+
+// 仕入れを日付順にたどり、最後の供給が尽きる日を出す。
+// 消費が始まるのは「前の供給が尽きた日」か「仕入れ日」の遅いほう。
+// 棚卸はその日を起点に鎖を切る。薬でもセットでも同じ理屈。
+function chainEnd(list, daysOf) {
+  let end = null, span = null;
+  for (const b of list) {
+    const d = daysOf(b);
+    const start = (b.kind === 'adjust' || end === null || end < dnum(b.date)) ? dnum(b.date) : end;
+    end = start + d;
+    span = d;
+  }
+  return { end, span };
+}
+
+// セットの残り。日数はセット単位で入れてもらうので、そのまま積む。
+function stockSet(x) {
+  const list = setBuysOf(x.id);
+  if (!list.length) return { none: true, rest: 0, days: null, runOut: null, span: null };
+  const { end, span } = chainEnd(list, b => (b.days > 0 ? b.days : 0));
+  const days = end - dnum(TODAY);
+  return { days, runOut: dstr(end), span, rest: 0 };
 }
 
 function statusOf(med, st) {
@@ -1065,17 +1191,27 @@ function statusOf(med, st) {
    一覧タブ
    ============================================================ */
 
-function visibleMeds() {
-  return S.meds.filter(m => SHOW_ENDED || m.active);
+// 一覧で扱う単位。セットに入っている薬は、日数をセットで見るので単独では出さない。
+function visibleUnits() {
+  const sets = S.sets.filter(x => SHOW_ENDED || x.active)
+    .map(x => ({ set: true, u: x, st: stockSet(x) }));
+  const meds = S.meds.filter(m => SHOW_ENDED || m.active).filter(m => !inActiveSet(m.id))
+    .map(m => ({ set: false, u: m, st: stock(m) }));
+  return sets.concat(meds);
+}
+
+function activeUnits() {
+  return S.sets.filter(x => x.active).map(x => ({ set: true, u: x, st: stockSet(x) }))
+    .concat(S.meds.filter(m => m.active && !inActiveSet(m.id)).map(m => ({ set: false, u: m, st: stock(m) })));
 }
 
 function renderList() {
-  const rows = visibleMeds().map(m => ({ m, st: stock(m) }));
-  rows.forEach(r => r.stt = statusOf(r.m, r.st));
+  const rows = visibleUnits();
+  rows.forEach(r => r.stt = statusOf(r.u, r.st));
 
-  const active = S.meds.filter(m => m.active);
-  const need = active.filter(m => { const s = stock(m); return s.days != null && s.days <= warnOf(m); });
-  const out = active.filter(m => { const s = stock(m); return s.days != null && s.days < 0; });
+  const active = activeUnits();
+  const need = active.filter(r => r.st.days != null && r.st.days <= warnOf(r.u));
+  const out = active.filter(r => r.st.days != null && r.st.days < 0);
 
   const ym = TODAY.slice(0, 7);
   const monthSum = S.buys.filter(b => b.date.startsWith(ym)).reduce((a, b) => a + b.amount, 0);
@@ -1090,21 +1226,20 @@ function renderList() {
   // バナー
   const bn = [];
   if (out.length) {
-    bn.push(`<div class="banner bad"><b>${out.map(m => esc(m.name)).join('、')}</b> が切れています。`
-      + `棚卸で残量を数え直すか、仕入れを記録してください。</div>`);
+    bn.push(`<div class="banner bad"><b>${out.map(r => esc(r.u.name)).join('、')}</b> が切れています。`
+      + `棚卸で残りを数え直すか、仕入れを記録してください。</div>`);
   }
-  const soon = need.filter(m => !out.includes(m))
-    .sort((a, b) => stock(a).days - stock(b).days);
+  const soon = need.filter(r => !out.includes(r)).sort((a, b) => a.st.days - b.st.days);
   if (soon.length) {
-    const f = soon[0], s = stock(f);
-    bn.push(`<div class="banner"><b>${esc(f.name)}</b> は <span class="num">${jdateY(s.runOut)}</span> ごろに切れます`
-      + `（あと <b class="num">${Math.floor(s.days)}</b> 日）。`
+    const f = soon[0];
+    bn.push(`<div class="banner"><b>${esc(f.u.name)}</b> は <span class="num">${jdateY(f.st.runOut)}</span> ごろに切れます`
+      + `（あと <b class="num">${Math.floor(f.st.days)}</b> 日）。`
       + (soon.length > 1 ? `ほか <b class="num">${soon.length - 1}</b> 件も補充時期です。` : '') + `</div>`);
   }
   if (!bn.length) {
     bn.push(active.length
       ? `<div class="banner good">当面の残量は足りています。次に切れるのは ${nextRunOutText()}です。</div>`
-      : `<div class="banner good">まず「薬」タブで定期薬を登録してください。</div>`);
+      : `<div class="banner good">まず「薬」タブで定期薬を、まとめてもらうなら「セット」タブで組み合わせを登録してください。</div>`);
   }
   $('banners').innerHTML = bn.join('');
 
@@ -1116,51 +1251,55 @@ function renderList() {
     `<button class="todo ${FILTER === 'need' ? 'active' : ''} ${need.length ? '' : 'zero'}" data-f="need">要補充 <b>${need.length}</b></button>`,
     `<button class="todo ${FILTER === 'out' ? 'active' : ''} ${out.length ? '' : 'zero'}" data-f="out">切れている <b>${out.length}</b></button>`
   ];
-  const ended = S.meds.filter(m => !m.active).length;
-  if (ended) chips.push(`<button class="todo ${SHOW_ENDED ? 'active' : ''}" data-e="1">終了した薬 <b>${ended}</b></button>`);
+  const ended = S.meds.filter(m => !m.active).length + S.sets.filter(x => !x.active).length;
+  if (ended) chips.push(`<button class="todo ${SHOW_ENDED ? 'active' : ''}" data-e="1">終了したもの <b>${ended}</b></button>`);
   $('todos').innerHTML = chips.join('');
   $('todos').querySelectorAll('[data-f]').forEach(b => b.onclick = () => { FILTER = b.dataset.f; renderList(); });
   $('todos').querySelectorAll('[data-e]').forEach(b => b.onclick = () => { SHOW_ENDED = !SHOW_ENDED; renderList(); });
 
   // カード
   let show = rows;
-  if (FILTER === 'need') show = rows.filter(r => r.st.days != null && r.st.days <= warnOf(r.m));
+  if (FILTER === 'need') show = rows.filter(r => r.st.days != null && r.st.days <= warnOf(r.u));
   if (FILTER === 'out') show = rows.filter(r => r.st.days != null && r.st.days < 0);
   show = show.slice().sort((a, b) => {
     const ka = a.st.days == null ? 1e9 : a.st.days;
     const kb = b.st.days == null ? 1e9 : b.st.days;
-    return ka - kb || a.m.name.localeCompare(b.m.name, 'ja');
+    return ka - kb || a.u.name.localeCompare(b.u.name, 'ja');
   });
 
   $('dlist').innerHTML = show.length ? show.map(cardHtml).join('')
-    : `<div class="empty">${S.meds.length ? '該当する薬がありません。' : 'まだ薬が登録されていません。「薬」タブから登録してください。'}</div>`;
+    : `<div class="empty">${S.meds.length || S.sets.length ? '該当するものがありません。' : 'まだ何も登録されていません。「薬」タブから登録してください。'}</div>`;
 
   $('dlist').querySelectorAll('[data-refill]').forEach(b => b.onclick = () => openEntry(null, b.dataset.refill));
   $('dlist').querySelectorAll('[data-editmed]').forEach(b => b.onclick = () => openMed(b.dataset.editmed));
+  $('dlist').querySelectorAll('[data-editset]').forEach(b => b.onclick = () => openSet(b.dataset.editset));
   $('dlist').querySelectorAll('[data-histmed]').forEach(b => b.onclick = () => {
     $('hMed').value = b.dataset.histmed; H_YEAR = 0; renderHist(); showTab('hist');
   });
 }
 
 function nextRunOutText() {
-  const list = S.meds.filter(m => m.active).map(m => stock(m)).filter(s => s.runOut);
+  const list = activeUnits().map(r => r.st).filter(st => st.runOut);
   if (!list.length) return '未計算';
   list.sort((a, b) => a.days - b.days);
   return `<span class="num">${jdateY(list[0].runOut)}</span>`;
 }
 
-function cardHtml({ m, st }) {
-  const stt = statusOf(m, st);
-  const w = warnOf(m);
-  const last = buysOf(m.id).slice(-1)[0];
-  const total = S.buys.filter(b => b.medId === m.id).reduce((a, b) => a + b.amount, 0);
-  const count = S.buys.filter(b => b.medId === m.id).length;
+function cardHtml({ set, u, st }) {
+  const stt = statusOf(u, st);
+  const w = warnOf(u);
+  const list = set ? setBuysOf(u.id) : buysOf(u.id);
+  const last = list.slice(-1)[0];
+  const total = list.reduce((a, b) => a + b.amount, 0);
 
   let big, sub;
-  if (st.none) { big = '—'; sub = '仕入れを記録すると残量が出ます'; }
-  else if (st.asNeeded) { big = `${qty(st.rest)}<small>${esc(m.unit)}</small>`; sub = '頓服（予測なし）'; }
+  if (st.none) { big = '—'; sub = '仕入れを記録すると残りが出ます'; }
+  else if (st.asNeeded) { big = `${qty(st.rest)}<small>${esc(u.unit)}</small>`; sub = '頓服（予測なし）'; }
   else if (st.days < 0) { big = `${Math.ceil(-st.days)}<small>日前に切れ</small>`; sub = `${jdate(st.runOut)}で尽きた計算`; }
-  else { big = `${Math.floor(st.days)}<small>日</small>`; sub = `${jdate(st.runOut)}ごろ・残 ${qty(st.rest)}${esc(m.unit)}`; }
+  else {
+    big = `${Math.floor(st.days)}<small>日</small>`;
+    sub = set ? `${jdate(st.runOut)}ごろまで` : `${jdate(st.runOut)}ごろ・残 ${qty(st.rest)}${esc(u.unit)}`;
+  }
 
   let g = '';
   if (st.span > 0 && st.days != null) {
@@ -1168,39 +1307,47 @@ function cardHtml({ m, st }) {
     g = `<div class="gauge ${st.days < 0 ? 'over' : st.days <= w ? 'warn' : ''}"><i style="width:${(p * 100).toFixed(1)}%"></i></div>`;
   }
 
-  return `<div class="d s-${stt.tone} ${m.active ? '' : 'ended'}">
+  const sub2 = set
+    ? `${u.items.length}種類のセット${u.memo ? '・' + esc(u.memo) : ''}`
+    : `${doseText(u)}${u.memo ? '・' + esc(u.memo) : ''}`;
+
+  const items = set && u.items.length
+    ? `<div class="d-items">${u.items.map(i => esc(medName(i.medId)) + (i.qty ? ` ${qty(i.qty)}${esc((medById(i.medId) || {}).unit || '')}` : '')).join('　')}</div>`
+    : '';
+
+  return `<div class="d s-${stt.tone} ${u.active ? '' : 'ended'}">
     <div class="d-main">
-      <div class="d-name">${esc(m.name)}</div>
-      <div class="d-sub">${doseText(m)}${m.memo ? '・' + esc(m.memo) : ''}</div>
+      <div class="d-name">${set ? '<span class="chip tag" style="margin-right:6px">セット</span>' : ''}${esc(u.name)}</div>
+      <div class="d-sub">${sub2}</div>
       <div class="d-meta">
-        ${last ? `<span>直近 ${jdate(last.date)}${last.amount ? ' ' + yen(last.amount) + '円' : ''}${last.place ? ' / ' + esc(last.place) : ''}</span>` : ''}
-        ${count ? `<span>累計 ${count}回 ${yen(total)}円</span>` : ''}
+        ${last ? `<span>直近 ${jdate(last.date)}${last.amount ? ' ' + yen(last.amount) + '円' : ''}${last.place ? '・' + esc(last.place) : ''}</span>` : ''}
+        ${list.length ? `<span>累計 ${list.length}回 ${yen(total)}円</span>` : ''}
       </div>
     </div>
     <div class="d-rest ${stt.cls}">
       <div class="big num">${big}</div>
       <div class="sub num">${sub}</div>
     </div>
+    ${items}
     ${g}
     <div class="d-bottom">
       <span class="chip tag ${stt.tone === 'bad' ? 'warn' : stt.tone === 'warn' ? 'mid' : stt.tone === 'ok' ? 'done' : ''}">${stt.label}</span>
-      ${m.active ? '' : '<span class="chip tag">終了</span>'}
-      ${m.place ? `<span class="chip tag">${esc(m.place)}</span>` : ''}
+      ${u.active ? '' : '<span class="chip tag">終了</span>'}
+      ${u.place ? `<span class="chip tag">${esc(u.place)}</span>` : ''}
       <div class="grow"></div>
-      <button class="chip" data-refill="${m.id}">＋ 仕入れ</button>
-      <button class="chip" data-histmed="${m.id}">履歴</button>
-      <button class="chip" data-editmed="${m.id}">編集</button>
+      <button class="chip" data-refill="${set ? 'set:' : ''}${u.id}">＋ 仕入れ</button>
+      ${set ? '' : `<button class="chip" data-histmed="${u.id}">履歴</button>`}
+      <button class="chip" data-${set ? 'editset' : 'editmed'}="${u.id}">編集</button>
     </div>
   </div>`;
 }
 
 function renderPlan() {
   const groups = {};
-  S.meds.filter(m => m.active).forEach(m => {
-    const st = stock(m);
-    if (st.runOut == null) return;
-    const key = m.place || '（入手先の登録なし）';
-    (groups[key] = groups[key] || []).push({ m, st });
+  activeUnits().forEach(r => {
+    if (r.st.runOut == null) return;
+    const key = r.u.place || '（入手先の登録なし）';
+    (groups[key] = groups[key] || []).push(r);
   });
   const keys = Object.keys(groups);
   if (!keys.length) { $('planCard').classList.add('hidden'); return; }
@@ -1212,13 +1359,13 @@ function renderPlan() {
   }).sort((a, b) => a.days - b.days);
 
   $('plan').innerHTML = rows.map(r => {
-    const w = Math.min(...r.g.map(x => warnOf(x.m)));
+    const w = Math.min(...r.g.map(x => warnOf(x.u)));
     const cls = r.days < 0 ? 'late' : r.days <= w ? 'soon' : '';
     const when = r.days < 0 ? `${Math.ceil(-r.days)}日前に切れ` : `${jdate(r.when)}ごろ・あと${Math.floor(r.days)}日`;
     return `<div class="plan-row ${cls}">
       <div class="p-place">${esc(r.k)} <span style="font-weight:400;color:var(--ink-dim);font-size:11.5px">${r.g.length}種類</span></div>
       <div class="p-when">${when}</div>
-      <div class="p-meds">${r.g.map(x => esc(x.m.name) + (x.st.days < 0 ? '（切れ）' : `（${Math.floor(x.st.days)}日）`)).join('　')}</div>
+      <div class="p-meds">${r.g.map(x => esc(x.u.name) + (x.st.days < 0 ? '（切れ）' : `（${Math.floor(x.st.days)}日）`)).join('　')}</div>
     </div>`;
   }).join('');
 }
@@ -1274,16 +1421,102 @@ function fillMedSelect(sel, opts) {
   sel.innerHTML = (o.head || '') + items.join('') + (o.tail || '');
 }
 
+// 記録タブの選択肢。セットと単品の薬を分けて並べる。
+function fillUnitSelect(sel, opts) {
+  const o = opts || {};
+  const sets = S.sets.slice().sort((a, b) =>
+    (a.active === b.active ? 0 : a.active ? -1 : 1) || a.name.localeCompare(b.name, 'ja'));
+  const meds = S.meds.slice().sort((a, b) =>
+    (a.active === b.active ? 0 : a.active ? -1 : 1) || a.name.localeCompare(b.name, 'ja'));
+
+  let html = o.head || '';
+  if (sets.length) {
+    html += `<optgroup label="セット">`
+      + sets.map(x => `<option value="set:${x.id}">${esc(x.name)}${x.active ? '' : '（終了）'}</option>`).join('')
+      + `</optgroup>`;
+  }
+  if (meds.length) {
+    html += sets.length ? `<optgroup label="薬">` : '';
+    html += meds.map(m => `<option value="${m.id}">${esc(m.name)}${m.active ? '' : '（終了）'}</option>`).join('');
+    html += sets.length ? `</optgroup>` : '';
+  }
+  sel.innerHTML = html + (o.tail || '');
+}
+
+const isSetVal = v => String(v || '').startsWith('set:');
+const setIdOf = v => String(v || '').slice(4);
+
+let ENTRY_ITEMS = [];   // 記録中のセット内訳 [{medId, qty}]
+
+function renderEntryItems() {
+  const el = $('fItems');
+  if (!ENTRY_ITEMS.length) {
+    el.innerHTML = `<div class="items"><div class="item-empty">このセットには薬が入っていません。「セット」タブで中身を登録してください。</div></div>`;
+    updateSetDaysHint();
+    return;
+  }
+  el.innerHTML = `<div class="items">${ENTRY_ITEMS.map((i, n) => {
+    const m = medById(i.medId);
+    return `<div class="item-row">
+      <span class="nm">${esc(medName(i.medId))}</span>
+      <input type="number" inputmode="decimal" step="any" min="0" data-eq="${n}" value="${i.qty || ''}" placeholder="0">
+      <span class="u">${esc(m ? m.unit : '')}</span>
+    </div>`;
+  }).join('')}</div>`;
+  el.querySelectorAll('[data-eq]').forEach(inp => inp.oninput = () => {
+    ENTRY_ITEMS[+inp.dataset.eq].qty = numf(inp.value);
+    updateSetDaysHint();
+  });
+  updateSetDaysHint();
+}
+
+// 内訳から「何日分か」を見積もる。いちばん早く尽きる薬でセット全体が切れる。
+function daysFromItems() {
+  const cand = ENTRY_ITEMS.map(i => {
+    const m = medById(i.medId);
+    return m && m.perDay > 0 && i.qty > 0 ? i.qty / m.perDay : null;
+  }).filter(v => v != null);
+  return cand.length ? Math.min(...cand) : null;
+}
+
+function updateSetDaysHint() {
+  const d = daysFromItems();
+  const cur = numf($('fDays').value);
+  $('setDaysHint').innerHTML = d == null
+    ? '日数分を入れてください。セットの残りはこの日数で数えます。'
+    : `内訳から計算すると <b>${qty(d)}日分</b> です`
+      + (cur > 0 && Math.abs(cur - d) > 0.5 ? `（いま入っているのは ${qty(cur)}日分）` : '')
+      + '。実際にもらった日数と違うときは、日数分の欄を書き換えてください。';
+}
+
 function initEntry() {
   $('nForm').innerHTML = FORM_NAMES.map(f => `<option>${f}</option>`).join('');
   $('nForm').onchange = () => { $('nUnit').value = FORM_UNIT[$('nForm').value]; updateCalcHint(); };
 
   $('fMed').onchange = () => {
-    const isNew = $('fMed').value === NEW_MED;
+    const v = $('fMed').value;
+    const isNew = v === NEW_MED;
+    const isSet = isSetVal(v);
     $('newMedBox').classList.toggle('hidden', !isNew);
+    $('setItemsBox').classList.toggle('hidden', !isSet);
+    // セットは日数で管理するので、数量ではなく日数分を必須にする
+    $('wrapQty').classList.toggle('hidden', isSet);
+    $('lbDays').innerHTML = isSet ? '日数分<span class="req">＊</span>' : '日数分（空欄なら数量から計算）';
     if (isNew && !$('nUnit').value) $('nUnit').value = FORM_UNIT[$('nForm').value];
-    const m = medById($('fMed').value);
-    if (m && !$('fPlace').value) fillPlaceSelect($('fPlace'), m.place, true);
+
+    if (isSet) {
+      const x = setById(setIdOf(v));
+      if (x) {
+        if (!ENTRY_ITEMS.length || !EDIT_BUY) ENTRY_ITEMS = x.items.map(i => ({ medId: i.medId, qty: i.qty }));
+        if (!$('fPlace').value) fillPlaceSelect($('fPlace'), x.place, true);
+        renderEntryItems();
+        if (!$('fDays').value) { const d = daysFromItems(); if (d) $('fDays').value = Math.round(d * 10) / 10; }
+        updateSetDaysHint();
+      }
+    } else {
+      const m = medById(v);
+      if (m && !$('fPlace').value) fillPlaceSelect($('fPlace'), m.place, true);
+    }
     updateCalcHint();
   };
   $('fPlace').onchange = () => {
@@ -1303,13 +1536,20 @@ function initEntry() {
   $('btnTagCancel').onclick = () => { $('tName').value = ''; $('newTagBox').classList.add('hidden'); };
   $('fKind').onchange = () => {
     const adj = $('fKind').value === 'adjust';
+    const isSet = isSetVal($('fMed').value);
     $('lbQty').innerHTML = adj ? 'いまの残量<span class="req">＊</span>' : '数量<span class="req">＊</span>';
-    $('wrapDays').classList.toggle('hidden', adj);
+    // セットの棚卸は「残り日数」を入れてもらう。日数の欄はそのまま使う。
+    $('lbDays').innerHTML = isSet
+      ? (adj ? 'いまの残り日数<span class="req">＊</span>' : '日数分<span class="req">＊</span>')
+      : '日数分（空欄なら数量から計算）';
+    $('wrapDays').classList.toggle('hidden', adj && !isSet);
     $('wrapAmount').classList.toggle('hidden', adj);
-    if (adj) { $('fDays').value = ''; $('fAmount').value = ''; }
+    $('setItemsBox').classList.toggle('hidden', !isSet || adj);
+    if (adj) { $('fAmount').value = ''; if (!isSet) $('fDays').value = ''; }
     updateCalcHint();
   };
-  ['fQty', 'fDays'].forEach(id => $(id).oninput = updateCalcHint);
+  $('fQty').oninput = updateCalcHint;
+  $('fDays').oninput = () => { updateCalcHint(); if (isSetVal($('fMed').value)) updateSetDaysHint(); };
   ['nDose', 'nEvery', 'nTimes', 'nUnit'].forEach(id => $(id).oninput = () => syncSchedUI('n'));
   $('nSched').onchange = () => syncSchedUI('n');
   $('fDate').onchange = updateCalcHint;
@@ -1325,16 +1565,16 @@ function initEntry() {
   };
 }
 
-function openEntry(buyId, medId) {
+function openEntry(buyId, unitId) {
   EDIT_BUY = buyId || null;
   refreshDatalists();
-  fillMedSelect($('fMed'), { tail: `<option value="${NEW_MED}">＋ 新しい薬を登録する</option>` });
+  fillUnitSelect($('fMed'), { tail: `<option value="${NEW_MED}">＋ 新しい薬を登録する</option>` });
 
   if (buyId) {
     const b = S.buys.find(x => x.id === buyId);
     if (!b) return;
     $('entryTitle').textContent = '仕入れ記録を編集する';
-    $('fMed').value = b.medId;
+    $('fMed').value = b.setId ? 'set:' + b.setId : b.medId;
     $('fDate').value = b.date;
     $('fKind').value = b.kind;
     $('fQty').value = b.qty || '';
@@ -1342,18 +1582,20 @@ function openEntry(buyId, medId) {
     $('fAmount').value = b.amount || '';
     fillPlaceSelect($('fPlace'), b.place, true);
     ENTRY_TAGS = b.tags.slice();
+    ENTRY_ITEMS = b.items.map(i => ({ medId: i.medId, qty: i.qty }));
     $('fMemo').value = b.memo;
     $('btnDelete').classList.remove('hidden');
   } else {
     $('entryTitle').textContent = '仕入れを記録する';
-    if (medId) $('fMed').value = medId;
-    else if (!S.meds.length) $('fMed').value = NEW_MED;
+    if (unitId) $('fMed').value = unitId.startsWith('set:') ? unitId : unitId;
+    else if (!S.meds.length && !S.sets.length) $('fMed').value = NEW_MED;
     $('fDate').value = TODAY;
     $('fKind').value = 'rx';
     ['fQty', 'fDays', 'fAmount', 'fMemo'].forEach(id => $(id).value = '');
+    ENTRY_TAGS = [];
+    ENTRY_ITEMS = [];
     const m = medById($('fMed').value);
     fillPlaceSelect($('fPlace'), m ? m.place : '', true);
-    ENTRY_TAGS = [];
     $('btnDelete').classList.add('hidden');
   }
   ['nName', 'nDose', 'pName', 'tName'].forEach(id => $(id).value = '');
@@ -1397,7 +1639,7 @@ function updateCalcHint() {
 
 function saveBuy() {
   const el = $('entryMsg');
-  let medId = $('fMed').value;
+  let val = $('fMed').value;
 
   // 入手先：新規なら先に登録する
   let place = $('fPlace').value;
@@ -1407,7 +1649,7 @@ function saveBuy() {
     if (!S.places.includes(place)) S.places.push(place);
   }
 
-  if (medId === NEW_MED) {
+  if (val === NEW_MED) {
     const name = $('nName').value.trim();
     if (!name) return msg(el, '新しい薬の名前を入れてください。', 'err');
     const f = schedFields('n');
@@ -1420,38 +1662,51 @@ function saveBuy() {
       place, active: true
     });
     S.meds.push(m);
-    medId = m.id;
+    val = m.id;
   }
-  if (!medId) return msg(el, '薬を選んでください。', 'err');
+  if (!val) return msg(el, '薬かセットを選んでください。', 'err');
   if (!$('fDate').value) return msg(el, '仕入れ日を入れてください。', 'err');
-  if (!(numf($('fQty').value) > 0)) return msg(el, '数量を入れてください。', 'err');
+
+  const isSet = isSetVal(val);
+  const adj = $('fKind').value === 'adjust';
+
+  if (isSet) {
+    // セットは日数で管理する。棚卸なら「いまの残り日数」。
+    if (!(numf($('fDays').value) > 0)) {
+      return msg(el, adj ? 'いまの残り日数を入れてください。' : '日数分を入れてください。', 'err');
+    }
+  } else if (!(numf($('fQty').value) > 0)) {
+    return msg(el, '数量を入れてください。', 'err');
+  }
 
   const b = normBuy({
     id: EDIT_BUY || undefined,
-    medId,
+    medId: isSet ? '' : val,
+    setId: isSet ? setIdOf(val) : '',
+    items: isSet && !adj ? ENTRY_ITEMS.filter(i => i.qty > 0) : [],
     date: $('fDate').value,
     kind: $('fKind').value,
-    qty: $('fQty').value,
-    days: $('fKind').value === 'adjust' ? null : $('fDays').value,
+    qty: isSet ? 0 : $('fQty').value,
+    days: isSet ? $('fDays').value : (adj ? null : $('fDays').value),
     amount: $('fAmount').value,
     place,
     tags: ENTRY_TAGS,
     memo: $('fMemo').value
   });
 
-  // 入手先が空の薬には、この入手先を既定として覚えさせる
-  const med = medById(medId);
-  if (med && !med.place && b.place) med.place = b.place;
+  // 入手先が空なら、この入手先を既定として覚えさせる
+  const unit = isSet ? setById(b.setId) : medById(b.medId);
+  if (unit && !unit.place && b.place) unit.place = b.place;
 
   if (EDIT_BUY) S.buys = S.buys.map(x => x.id === EDIT_BUY ? b : x);
   else S.buys.push(b);
   save();
 
-  const st = stock(med);
+  const st = isSet ? stockSet(unit) : stock(unit);
   const tail = st.runOut ? `次に切れるのは ${jdateY(st.runOut)} ごろです。` : '';
   renderAll();
-  openEntry(null, medId);
-  msg($('entryMsg'), `${esc(med.name)} を記録しました。${tail}`, 'ok');
+  openEntry(null, isSet ? 'set:' + b.setId : b.medId);
+  msg($('entryMsg'), `${esc(unit.name)} を記録しました。${tail}`, 'ok');
 }
 
 /* ============================================================
@@ -1579,6 +1834,146 @@ function renderMedTable() {
 }
 
 /* ============================================================
+   セットタブ
+
+   毎回まとめてもらう薬の組み合わせ。日数はセット単位で持ち、
+   中身（どの薬が何個か）は内訳として並べる。
+   ============================================================ */
+
+let EDIT_SET = null;
+let SET_ITEMS = [];        // 編集中の内訳 [{medId, qty}]
+
+function initSets() {
+  $('xPlace').onchange = () => {
+    $('newPlaceBox3').classList.toggle('hidden', $('xPlace').value !== NEW_PLACE);
+    if ($('xPlace').value === NEW_PLACE) $('pName3').focus();
+  };
+  $('btnItemAdd').onclick = () => {
+    const id = $('xAddMed').value;
+    if (!id) return msg($('setMsg'), '先に「薬」タブで薬を登録してください。', 'err');
+    if (SET_ITEMS.some(i => i.medId === id)) return msg($('setMsg'), 'その薬はもう入っています。', 'err');
+    SET_ITEMS.push({ medId: id, qty: 0 });
+    renderSetItems();
+    msg($('setMsg'), '', 'info');
+  };
+  $('btnSetSave').onclick = saveSet;
+  $('btnSetClear').onclick = () => openSet(null);
+  $('btnSetDelete').onclick = () => {
+    if (!EDIT_SET) return;
+    const n = S.buys.filter(b => b.setId === EDIT_SET).length;
+    if (!confirm(n ? `このセットと、ひもづく記録 ${n} 件を削除します。よろしいですか？`
+                   : 'このセットを削除します。よろしいですか？')) return;
+    S.sets = S.sets.filter(x => x.id !== EDIT_SET);
+    S.buys = S.buys.filter(b => b.setId !== EDIT_SET);
+    save(); openSet(null); renderAll();
+    msg($('setMsg'), '削除しました。', 'ok');
+  };
+}
+
+function renderSetItems() {
+  const el = $('xItems');
+  if (!SET_ITEMS.length) {
+    el.innerHTML = `<div class="items"><div class="item-empty">まだ薬が入っていません。下から選んで入れてください。</div></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="items">${SET_ITEMS.map((i, n) => {
+    const m = medById(i.medId);
+    return `<div class="item-row">
+      <span class="nm">${esc(medName(i.medId))}</span>
+      <input type="number" inputmode="decimal" step="any" min="0" data-q="${n}" value="${i.qty || ''}" placeholder="0">
+      <span class="u">${esc(m ? m.unit : '')} <button class="chip" data-rm="${n}">外す</button></span>
+    </div>`;
+  }).join('')}</div>`;
+
+  el.querySelectorAll('[data-q]').forEach(inp => inp.oninput = () => { SET_ITEMS[+inp.dataset.q].qty = numf(inp.value); });
+  el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { SET_ITEMS.splice(+b.dataset.rm, 1); renderSetItems(); });
+}
+
+function openSet(id) {
+  EDIT_SET = id || null;
+  refreshDatalists();
+  fillMedSelect($('xAddMed'), { head: S.meds.length ? '' : `<option value="">（薬が未登録です）</option>` });
+
+  if (id) {
+    const x = setById(id);
+    if (!x) return;
+    $('setTitle').textContent = 'セットを編集する';
+    $('xName').value = x.name;
+    fillPlaceSelect($('xPlace'), x.place, true);
+    $('xWarn').value = x.warnDays == null ? '' : x.warnDays;
+    $('xActive').value = x.active ? '1' : '0';
+    $('xMemo').value = x.memo;
+    SET_ITEMS = x.items.map(i => ({ medId: i.medId, qty: i.qty }));
+    $('btnSetDelete').classList.remove('hidden');
+  } else {
+    $('setTitle').textContent = 'セットを登録する';
+    ['xName', 'xWarn', 'xMemo'].forEach(k => $(k).value = '');
+    fillPlaceSelect($('xPlace'), '', true);
+    $('xActive').value = '1';
+    SET_ITEMS = [];
+    $('btnSetDelete').classList.add('hidden');
+  }
+  $('pName3').value = '';
+  $('xPlace').onchange();
+  renderSetItems();
+  msg($('setMsg'), '', 'info');
+  renderSetTable();
+  showTab('sets');
+  if (id) window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function saveSet() {
+  const el = $('setMsg');
+  if (!$('xName').value.trim()) return msg(el, 'セットの名前を入れてください。', 'err');
+
+  let place = $('xPlace').value;
+  if (place === NEW_PLACE) {
+    place = $('pName3').value.trim();
+    if (!place) { $('pName3').focus(); return msg(el, '新しい入手先の名前を入れてください。', 'err'); }
+    if (!S.places.includes(place)) S.places.push(place);
+  }
+
+  const x = normSet({
+    id: EDIT_SET || undefined,
+    name: $('xName').value, place,
+    warnDays: $('xWarn').value === '' ? null : $('xWarn').value,
+    active: $('xActive').value === '1',
+    memo: $('xMemo').value,
+    items: SET_ITEMS
+  });
+  if (EDIT_SET) S.sets = S.sets.map(y => y.id === EDIT_SET ? x : y);
+  else S.sets.push(x);
+  save(); renderAll();
+  const wasNew = !EDIT_SET;
+  openSet(null);
+  msg(el, wasNew ? `${esc(x.name)} を登録しました。記録タブから仕入れを入れてください。` : '保存しました。', 'ok');
+}
+
+function renderSetTable() {
+  const list = S.sets.slice().sort((a, b) =>
+    (a.active === b.active ? 0 : a.active ? -1 : 1) || a.name.localeCompare(b.name, 'ja'));
+  const t = $('setTable');
+  if (!list.length) { t.innerHTML = `<tr><td><div class="empty">まだ登録がありません。</div></td></tr>`; return; }
+
+  t.innerHTML = `
+    <thead><tr><th>セット</th><th>中身</th><th class="n">残り</th><th>切れる日</th><th class="n">通知</th><th>状態</th><th></th></tr></thead>
+    <tbody>${list.map(x => {
+      const st = stockSet(x);
+      return `<tr>
+        <td class="wrap-c">${esc(x.name)}</td>
+        <td class="wrap-c">${x.items.length ? x.items.map(i => esc(medName(i.medId)) + (i.qty ? ` ${qty(i.qty)}` : '')).join('、') : '—'}</td>
+        <td class="n">${st.days == null ? '—' : Math.max(0, Math.floor(st.days)) + '日'}</td>
+        <td class="n">${st.runOut ? jdateY(st.runOut) : '—'}</td>
+        <td class="n">${warnOf(x)}日</td>
+        <td>${x.active ? '継続中' : '終了'}</td>
+        <td><button class="chip" data-editset="${x.id}">編集</button></td>
+      </tr>`;
+    }).join('')}</tbody>`;
+
+  t.querySelectorAll('[data-editset]').forEach(b => b.onclick = () => openSet(b.dataset.editset));
+}
+
+/* ============================================================
    履歴タブ
    ============================================================ */
 
@@ -1604,7 +1999,8 @@ function renderHist() {
 
   let rows = S.buys.filter(b => b.date);
   if (H_YEAR) rows = rows.filter(b => b.date.startsWith(String(H_YEAR)));
-  if ($('hMed').value) rows = rows.filter(b => b.medId === $('hMed').value);
+  if ($('hMed').value) rows = rows.filter(b => b.medId === $('hMed').value
+    || (b.setId && b.items.some(i => i.medId === $('hMed').value)));
   if ($('hTag').value) rows = rows.filter(b => b.tags.includes($('hTag').value));
   rows.sort((a, b) => b.date.localeCompare(a.date));
 
@@ -1616,17 +2012,25 @@ function renderHist() {
 
   $('histTable').innerHTML = `
     <thead><tr>
-      <th>日付</th><th>薬</th><th>種別</th>
-      <th class="n">数量</th><th class="n">日数</th><th class="n">金額</th><th>入手先</th><th>タグ</th><th>メモ</th><th></th>
+      <th>日付</th><th>薬・セット</th><th>種別</th>
+      <th>数量・内訳</th><th class="n">日数</th><th class="n">金額</th><th>入手先</th><th>タグ</th><th>メモ</th><th></th>
     </tr></thead>
     <tbody>${rows.map(b => {
-      const m = medById(b.medId) || { name: '（削除済み）', unit: '', perDay: 0 };
-      const d = b.kind === 'adjust' ? '—' : (() => { const x = supplyDays(m, b); return x > 0 ? qty(x) + '日' : '—'; })();
+      const x = b.setId ? setById(b.setId) : null;
+      const m = b.setId ? null : (medById(b.medId) || { name: '（削除済み）', unit: '', perDay: 0 });
+      const d = b.setId
+        ? (b.days > 0 ? qty(b.days) + '日' : '—')
+        : (b.kind === 'adjust' ? '—' : (() => { const v = supplyDays(m, b); return v > 0 ? qty(v) + '日' : '—'; })());
+      const qtyCell = b.setId
+        ? (b.items.length
+            ? `<span class="tags-cell">${b.items.map(i => `<span class="chip tag">${esc(medName(i.medId))} ${qty(i.qty)}</span>`).join('')}</span>`
+            : '—')
+        : qty(b.qty) + esc(m.unit);
       return `<tr>
         <td class="n">${b.date}</td>
-        <td class="wrap-c">${esc(m.name)}</td>
+        <td class="wrap-c">${b.setId ? `<span class="chip tag" style="margin-right:5px">セット</span>${esc(x ? x.name : '（削除済み）')}` : esc(m.name)}</td>
         <td>${KIND_LABEL[b.kind]}</td>
-        <td class="n">${qty(b.qty)}${esc(m.unit)}</td>
+        <td class="wrap-c">${qtyCell}</td>
         <td class="n">${d}</td>
         <td class="n">${b.amount ? yen(b.amount) : '—'}</td>
         <td class="wrap-c">${esc(b.place || '—')}</td>
@@ -1693,7 +2097,9 @@ function renderStats() {
     year.forEach(b => { const k = fn(b); if (k) g[k] = (g[k] || 0) + b.amount; });
     return Object.entries(g).sort((a, b) => b[1] - a[1]);
   };
-  $('byMed').innerHTML = bars(sumBy(b => (medById(b.medId) || {}).name || '（削除済み）'));
+  $('byMed').innerHTML = bars(sumBy(b => b.setId
+    ? ((setById(b.setId) || {}).name || '（削除済みのセット）')
+    : ((medById(b.medId) || {}).name || '（削除済みの薬）')));
   $('byPlace').innerHTML = bars(sumBy(b => b.place || '（入手先なし）'));
 
   const gt = {};
@@ -1830,11 +2236,16 @@ function initSettings() {
     msg($('dataMsg'), '書き出しました。', 'ok');
   };
   $('btnExportCsv').onclick = () => {
-    const head = ['仕入れ日', '薬', '種別', '数量', '単位', '日数分', '金額', '入手先', 'タグ', 'メモ'];
+    const head = ['仕入れ日', '薬・セット', '種別', '数量', '単位', '内訳', '日数分', '金額', '入手先', 'タグ', 'メモ'];
     const rows = S.buys.slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')).map(b => {
-      const m = medById(b.medId) || { name: '（削除済み）', unit: '', perDay: 0 };
-      const d = b.kind === 'adjust' ? '' : supplyDays(m, b);
-      return [b.date, m.name, KIND_LABEL[b.kind], b.qty, m.unit,
+      const x = b.setId ? setById(b.setId) : null;
+      const m = b.setId ? null : (medById(b.medId) || { name: '（削除済み）', unit: '', perDay: 0 });
+      const d = b.setId ? (b.days || '') : (b.kind === 'adjust' ? '' : supplyDays(m, b));
+      const breakdown = b.setId
+        ? b.items.map(i => `${medName(i.medId)} ${qty(i.qty)}${(medById(i.medId) || {}).unit || ''}`).join('・')
+        : '';
+      return [b.date, b.setId ? (x ? x.name : '（削除済みのセット）') : m.name, KIND_LABEL[b.kind],
+              b.setId ? '' : b.qty, b.setId ? '' : m.unit, breakdown,
               d ? Math.round(d * 10) / 10 : '', b.amount, b.place, b.tags.join('・'), b.memo];
     });
     const csv = [head, ...rows].map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
@@ -1856,6 +2267,7 @@ function initSettings() {
           version: 1,
           updatedAt: '',
           meds: o.meds.map(normMed),
+          sets: Array.isArray(o.sets) ? o.sets.map(normSet) : [],
           buys: o.buys.map(normBuy),
           places: names(o.places),
           tags: names(o.tags),
@@ -1978,6 +2390,7 @@ function payload() {
     version: 1,
     updatedAt: S.updatedAt,
     meds: S.meds,
+    sets: S.sets,
     buys: S.buys,
     places: S.places,
     tags: S.tags,
@@ -1992,6 +2405,7 @@ function parseRemote(text) {
     version: 1,
     updatedAt: typeof d.updatedAt === 'string' ? d.updatedAt : '',
     meds: d.meds.map(normMed),
+    sets: Array.isArray(d.sets) ? d.sets.map(normSet) : [],
     buys: d.buys.map(normBuy),
     places: names(d.places),
     tags: names(d.tags),
@@ -2059,7 +2473,7 @@ function applyRemote(remote) {
   // クラウドから中身が戻ってきたので、書き込みの止めは解除してよい
   LOST = false; HOLD = false; LOAD_FAILED = false;
   // 取り込むと手元の内容は消える。直前の状態を1世代だけ退避しておく。
-  if (S.meds.length || S.buys.length) {
+  if (S.meds.length || S.sets.length || S.buys.length) {
     try {
       localStorage.setItem(BACKUP_KEY, JSON.stringify({ savedAt: new Date().toISOString(), data: S }));
     } catch (e) { /* 退避できなくても取り込みは続ける */ }
@@ -2080,6 +2494,7 @@ function redrawAll() {
   applyTheme();
   $('sWarn').value = S.settings.warnDays;
   openMed(null);
+  openSet(null);
   openEntry();
   renderAll();
   renderStats();
@@ -2103,7 +2518,7 @@ function runSync(manual) {
   work.then(remote => {
     if (!remote) return pushRemote();
 
-    const remoteHas = remote.meds.length || remote.buys.length;
+    const remoteHas = remote.meds.length || remote.sets.length || remote.buys.length;
 
     // 手元が白紙のとき（初めての端末、localStorage が消えた、読み出しに失敗した）は、
     // 送る側には絶対に回さない。聞かずに取り込む。ここで確認を挟むと、
@@ -2115,7 +2530,7 @@ function runSync(manual) {
 
     const localChanged = S.updatedAt !== SY.lastSyncedAt;
     const remoteChanged = remote.updatedAt !== SY.lastSyncedAt;
-    const localEmpty = !S.meds.length && !S.buys.length;
+    const localEmpty = !S.meds.length && !S.sets.length && !S.buys.length;
 
     if (!localChanged && !remoteChanged) return '最新です';
 
@@ -2182,7 +2597,8 @@ function askConflict(remote, mode) {
       const cell = document.createElement('div');
       const c = document.createElement('span'); c.textContent = cap;
       const w = document.createElement('b'); w.textContent = fmtStamp(d.updatedAt);
-      const n = document.createElement('b'); n.textContent = `薬 ${d.meds.length}件 / 記録 ${d.buys.length}件`;
+      const n = document.createElement('b');
+      n.textContent = `薬 ${d.meds.length}件` + (d.sets.length ? ` / セット ${d.sets.length}件` : '') + ` / 記録 ${d.buys.length}件`;
       cell.append(c, w, n);
       sides.appendChild(cell);
     });
@@ -2395,6 +2811,7 @@ function initSync() {
     S = {
       version: 1, updatedAt: '',
       meds: (b.data.meds || []).map(normMed),
+      sets: (b.data.sets || []).map(normSet),
       buys: (b.data.buys || []).map(normBuy),
       places: names(b.data.places),
       tags: names(b.data.tags),
@@ -2488,21 +2905,24 @@ function renderAll() {
   syncMedSelect();
   renderList();
   renderMedTable();
+  renderSetTable();
   renderHist();
 }
 
 // 薬が増減しても記録タブの選択肢が古いままにならないように、選択は保ったまま作り直す
 function syncMedSelect() {
   const keep = $('fMed').value;
-  fillMedSelect($('fMed'), { tail: `<option value="${NEW_MED}">＋ 新しい薬を登録する</option>` });
-  if (keep === NEW_MED || (keep && medById(keep))) $('fMed').value = keep;
-  else if (!S.meds.length) $('fMed').value = NEW_MED;
-  // 薬が無いあいだは新規登録が選ばれている。薬が増えたら、書きかけでない限りそちらへ寄せる
-  if ($('fMed').value === NEW_MED && S.meds.length && !$('nName').value.trim()) $('fMed').selectedIndex = 0;
+  fillUnitSelect($('fMed'), { tail: `<option value="${NEW_MED}">＋ 新しい薬を登録する</option>` });
+  const stillThere = keep === NEW_MED
+    || (isSetVal(keep) ? !!setById(setIdOf(keep)) : !!medById(keep));
+  if (stillThere) $('fMed').value = keep;
+  else if (!S.meds.length && !S.sets.length) $('fMed').value = NEW_MED;
+  // 何も無いあいだは新規登録が選ばれている。増えたら、書きかけでない限りそちらへ寄せる
+  if ($('fMed').value === NEW_MED && (S.meds.length || S.sets.length) && !$('nName').value.trim()) $('fMed').selectedIndex = 0;
   $('newMedBox').classList.toggle('hidden', $('fMed').value !== NEW_MED);
 }
 
-const TABS = ['list', 'entry', 'meds', 'hist', 'stats', 'settings'];
+const TABS = ['list', 'entry', 'meds', 'sets', 'hist', 'stats', 'settings'];
 let CUR_TAB = 'list';
 function showTab(name) {
   CUR_TAB = name;
@@ -2533,11 +2953,13 @@ $('todayTag').textContent = TODAY;
 applyTheme();
 initEntry();
 initMeds();
+initSets();
 initNameTables();
 initHist();
 initStats();
 initSettings();
 openMed(null);
+openSet(null);
 openEntry();
 renderAll();
 showTab('list');
